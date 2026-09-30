@@ -572,9 +572,10 @@ function TravelAA() {
   const settlementBalances = useMemo(() => {
     const out: Record<string, number> = {};
     people.forEach(p => {
-      out[p.id] =
-        (balances.usd[p.id] || 0) * settlementRateValue * settlementFeeMultiplier +
+      const baseCny =
+        (balances.usd[p.id] || 0) * settlementRateValue +
         (balances.cny[p.id] || 0);
+      out[p.id] = baseCny * settlementFeeMultiplier;
     });
     return out;
   }, [people, balances, settlementRateValue, settlementFeeMultiplier]);
@@ -850,21 +851,6 @@ function TravelAA() {
           <p className="hint">
             CNY 账单始终按人民币记录；其他币种在录入时固定换算为 USD。进入本页时只刷新一次 USD/CNY，最终统一显示人民币。
           </p>
-          <div className="buttons">
-            <button type="button" onClick={() => void refreshSettlementRate()}>立即刷新</button>
-            <button
-              type="button"
-              className={settlementFeeEnabled ? 'active' : ''}
-              onClick={() => {
-                const next = !settlementFeeEnabled;
-                setSettlementFeeEnabled(next);
-                localStorage.setItem('usd_cny_fee_enabled', next ? '1' : '0');
-              }}
-            >
-              <span>提现手续费 +0.1%：</span>
-              <span>{settlementFeeEnabled ? '已启用' : '未启用'}</span>
-            </button>
-          </div>
           <div className="summary">
             <div>
               <span>累计账单</span>
@@ -918,6 +904,21 @@ function TravelAA() {
               ) : (
                 <div className="empty">目前已经全部平账。</div>
               )}
+              <div className="buttons">
+                <button type="button" onClick={() => void refreshSettlementRate()}>立即刷新</button>
+                <button
+                  type="button"
+                  className={settlementFeeEnabled ? 'active' : ''}
+                  onClick={() => {
+                    const next = !settlementFeeEnabled;
+                    setSettlementFeeEnabled(next);
+                    localStorage.setItem('usd_cny_fee_enabled', next ? '1' : '0');
+                  }}
+                >
+                  <span>提现手续费 +0.1%：</span>
+                  <span>{settlementFeeEnabled ? '已启用' : '未启用'}</span>
+                </button>
+              </div>
               <div className="personalResetArea">
                 <div className="personalResetTitle">个人清算重置</div>
                 <div className="personalResetList">
