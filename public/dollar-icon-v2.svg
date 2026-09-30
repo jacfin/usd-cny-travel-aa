@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+<linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#063EAD"/><stop offset=".55" stop-color="#087DDB"/><stop offset="1" stop-color="#18D5C4"/></linearGradient>
+<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFF7A0"/><stop offset=".5" stop-color="#FFD33D"/><stop offset="1" stop-color="#F39B12"/></linearGradient>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#b)"/>
+<circle cx="256" cy="256" r="178" fill="none" stroke="#A8F7FF" stroke-opacity=".3" stroke-width="4"/>
+<ellipse cx="256" cy="256" rx="178" ry="76" fill="none" stroke="#A8F7FF" stroke-opacity=".22" stroke-width="3"/>
+<ellipse cx="256" cy="256" rx="82" ry="178" fill="none" stroke="#A8F7FF" stroke-opacity=".22" stroke-width="3"/>
+<path d="M115 218c15-73 74-126 145-126 39 0 76 14 104 39l-30 31c-20-18-45-28-74-28-45 0-84 30-97 73z" fill="#DDFBFF"/>
+<path d="M113 195l5 57 50-31z" fill="#DDFBFF"/>
+<path d="M397 294c-15 73-74 126-145 126-39 0-76-14-104-39l30-31c20 18 45 28 74 28 45 0 84-30 97-73z" fill="#70EEE5"/>
+<path d="M399 317l-5-57-50 31z" fill="#70EEE5"/>
+<text x="256" y="353" text-anchor="middle" font-family="Arial,sans-serif" font-size="260" font-weight="900" fill="url(#g)" stroke="#E99516" stroke-width="5" paint-order="stroke">$</text>
+</svg>
