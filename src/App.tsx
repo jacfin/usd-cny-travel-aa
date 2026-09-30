@@ -534,6 +534,8 @@ function TravelAA() {
     }
   };
 
+  const [settlementRate, setSettlementRate] = useState<number | null>(null);
+  const [settlementRateUpdatedAt, setSettlementRateUpdatedAt] = useState('');
   const balances = useMemo(() => {
     const validIds = new Set(people.map(p => p.id));
     const usd: Record<string, number> = {};
