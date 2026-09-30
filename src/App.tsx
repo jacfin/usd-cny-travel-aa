@@ -268,7 +268,7 @@ function TravelAA() {
     if (moved < 10) action();
   };
 
-  const CURRENCIES = [['USD','美元'],['EUR','欧元'],['GBP','英镑'],['JPY','日元'],['CAD','加元'],['AUD','澳元'],['MXN','墨西哥比索'],['CHF','瑞士法郎'],['THB','泰铢'],['VND','越南盾'],['SGD','新加坡元'],['KRW','韩元'],['HKD','港币'],['TWD','新台币'],['MYR','马来西亚林吉特'],['INR','印度卢比'],['NZD','新西兰元'],['ARS','阿根廷比索'],['BRL','巴西雷亚尔'],['PEN','秘鲁索尔'],['BOB','玻利维亚诺'],['CLP','智利比索']] as const;
+  const CURRENCIES = [['USD','美元'],['CNY','人民币'],['EUR','欧元'],['GBP','英镑'],['JPY','日元'],['CAD','加元'],['AUD','澳元'],['MXN','墨西哥比索'],['CHF','瑞士法郎'],['THB','泰铢'],['VND','越南盾'],['SGD','新加坡元'],['KRW','韩元'],['HKD','港币'],['TWD','新台币'],['MYR','马来西亚林吉特'],['INR','印度卢比'],['NZD','新西兰元'],['ARS','阿根廷比索'],['BRL','巴西雷亚尔'],['PEN','秘鲁索尔'],['BOB','玻利维亚诺'],['CLP','智利比索']] as const;
 
   const loadMastercardRate = async (nextCurrency: string) => {
     if (nextCurrency === 'USD') {
@@ -279,13 +279,24 @@ function TravelAA() {
     }
     setFxLoading(true);
     try {
-      const response = await api.get('/api/rates/mastercard?currency=' + encodeURIComponent(nextCurrency));
-      const data = response.data as { rate: number };
-      if (!(data.rate > 0)) throw new Error('invalid rate');
-      setFxRate(data.rate);
-      setFxFetchedAt(new Date().toLocaleString('zh-CN', { hour12: false }));
-      const v = Number(amount);
-      setUsdAmount(v > 0 ? v * data.rate : null);
+      if (nextCurrency === 'CNY') {
+        const response = await api.get('/api/rates/usd-cny');
+        const data = response.data as { rate: number };
+        if (!(data.rate > 0)) throw new Error('invalid rate');
+        const cnyToUsd = 1 / data.rate;
+        setFxRate(cnyToUsd);
+        setFxFetchedAt(new Date().toLocaleString('zh-CN', { hour12: false }));
+        const v = Number(amount);
+        setUsdAmount(v > 0 ? v * cnyToUsd : null);
+      } else {
+        const response = await api.get('/api/rates/mastercard?currency=' + encodeURIComponent(nextCurrency));
+        const data = response.data as { rate: number };
+        if (!(data.rate > 0)) throw new Error('invalid rate');
+        setFxRate(data.rate);
+        setFxFetchedAt(new Date().toLocaleString('zh-CN', { hour12: false }));
+        const v = Number(amount);
+        setUsdAmount(v > 0 ? v * data.rate : null);
+      }
       setError('');
     } catch {
       setFxRate(null);
@@ -658,7 +669,7 @@ function TravelAA() {
                   {fxLoading ? '获取中…' : '获取汇率'}
                 </button>
                 <span className={'fxTime ' + (fxRate ? 'success' : 'failure')}>
-                  {fxLoading ? '正在获取汇率…' : fxRate ? '汇率已获取 · ' + (fxFetchedAt || '') : '汇率获取失败，请重试'}
+                  {fxLoading ? '正在获取汇率…' : fxRate ? (currency === 'CNY' ? 'USD/CNY 已获取 · ' : 'Mastercard 汇率已获取 · ') + (fxFetchedAt || '') : '汇率获取失败，请重试'}
                 </span>
               </>
             ) : (
@@ -715,7 +726,9 @@ function TravelAA() {
           {amount && shareIds.length > 0 && (
             <div className="split">
               每人承担{' '}
-              <b>{'USD ' + ((usdAmount ?? Number(amount)) / shareIds.length).toFixed(2)} USD</b>
+              <b>{currency === 'CNY'
+                ? Number(amount / shareIds.length).toFixed(2) + ' CNY'
+                : 'USD ' + ((usdAmount ?? Number(amount)) / shareIds.length).toFixed(2) + ' USD'}</b>
             </div>
           )}
           <div className="formDivider" />
@@ -760,7 +773,9 @@ function TravelAA() {
                   </div>
                   <div className="billMeta">
                     分摊：{b.shareIds.map(personNameOf).join('、')} · 每人{' '}
-                    {'USD ' + ((b.usdAmount ?? b.amount) / b.shareIds.length).toFixed(2)}
+                    {b.currency === 'CNY'
+                      ? (b.amount / b.shareIds.length).toFixed(2) + ' CNY'
+                      : 'USD ' + ((b.usdAmount ?? b.amount) / b.shareIds.length).toFixed(2)}
                     {b.note ? (
                       <>
                         <br />
