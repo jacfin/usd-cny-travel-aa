@@ -254,6 +254,9 @@ function TravelAA() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [cloudSyncWarning, setCloudSyncWarning] = useState(false);
+  const cloudSyncFailuresRef = useRef(0);
+  const cloudSyncInFlightRef = useRef(false);
   const [error, setError] = useState('');
   const initializedPeopleRef = useRef(false);
   const choicePointerStart = useRef<{ x: number; y: number } | null>(null);
@@ -321,6 +324,8 @@ function TravelAA() {
   };
 
   async function load() {
+    if (cloudSyncInFlightRef.current) return;
+    cloudSyncInFlightRef.current = true;
     try {
       const [p, b, sr] = await Promise.all([
         api.get('/api/people'),
@@ -339,11 +344,14 @@ function TravelAA() {
         setPayerId(prev => prev && nextPeople.some(p => p.id === prev) ? prev : (nextPeople[0]?.id || ''));
         setShareIds(prev => prev.filter(id => nextPeople.some(p => p.id === id)));
       }
+      cloudSyncFailuresRef.current = 0;
+      setCloudSyncWarning(false);
       setError('');
     } catch {
-      setModalMessage('云端数据读取失败，请稍后重试。');
-      setRateModal(true);
+      cloudSyncFailuresRef.current += 1;
+      if (cloudSyncFailuresRef.current >= 2) setCloudSyncWarning(true);
     } finally {
+      cloudSyncInFlightRef.current = false;
       setLoading(false);
     }
   }
@@ -638,7 +646,7 @@ function TravelAA() {
           <h1>旅行 AA 云端记账</h1>
           <p>多人共同使用 · 云端保存 · 自动累计结算</p>
         </div>
-        <span className="sync">{loading ? '同步中…' : '● 云端已同步'}</span>
+        <span className="sync">{loading ? '同步中…' : cloudSyncWarning ? '云端连接异常，正在重试…' : '● 云端已同步'}</span>
       </header>
       <nav className="tabs">
         <button
