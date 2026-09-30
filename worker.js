@@ -217,7 +217,7 @@ async function handleApi(request, env) {
   }
   const personMatch=path.match(/^\/api\/people\/([^/]+)$/);
   const resetMatch=path.match(/^\/api\/people\/([^/]+)\/settlement-reset$/);
-  if (resetMatch && method==='DELETE') {
+  if (resetMatch && (method==='POST' || method==='DELETE')) {
     const pid=decodeURIComponent(resetMatch[1]);
     const person=await env.DB.prepare('SELECT id,name FROM people WHERE id=?').bind(pid).first();
     if (!person) return fail('person not found',404);
