@@ -589,7 +589,7 @@ function TravelAA() {
       .filter(x => x[1] < -0.005)
       .map(x => ({ id: x[0], value: -x[1] }))
       .sort((a, b) => b.value - a.value);
-    const creditors = Object.entries(settlementBalances)
+    const creditors = Object.entries(displaySettlementBalances)
       .filter(x => x[1] > 0.005)
       .map(x => ({ id: x[0], value: x[1] }))
       .sort((a, b) => b.value - a.value);
@@ -629,11 +629,9 @@ function TravelAA() {
     setSaving(true);
     try {
       await api.post('/api/people/' + encodeURIComponent(person.id) + '/settlement-reset', {
-        data: {
-          usdAdjustment: -(balances.usd[person.id] || 0),
-          cnyAdjustment: -(balances.cny[person.id] || 0),
-          transfers: relatedTransfers,
-        },
+        usdAdjustment: 0,
+        cnyAdjustment: 0,
+        transfers: relatedTransfers,
       });
       await load();
       setPersonResetTarget(null);
@@ -972,7 +970,7 @@ function TravelAA() {
                 <div className="personalResetHint">点击后表示这个人当前显示的应付/应收已经实际完成转账；历史账单、分摊记录、人员姓名全部保留，并留下本次实际转账记录。</div>
               </div>
               <div className="personalResetArea">
-                <div className="personalResetTitle">已记录的转账</div>
+                <div className="personalResetTitle">账款结清</div>
                 {settlementResets.length ? (
                   <div className="transfers">
                     {settlementResets.slice().reverse().map((reset, i) => (
