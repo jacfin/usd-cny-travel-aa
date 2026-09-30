@@ -39,11 +39,11 @@ async function fetchText(url) {
   return r.text();
 }
 function stripHtml(s) {
-  return s.replace(/<script[\\s\\S]*?<\\/script>/gi,' ').replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&amp;/gi,'&').replace(/\\s+/g,' ').trim();
+  return s.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
 }
 function parseBankRate(text) {
   const plain=stripHtml(text);
-  const m=plain.match(/美元\\s*USD\\s+([0-9]+(?:\\.[0-9]+)?)\\s+([0-9]+(?:\\.[0-9]+)?)/i);
+  const m=plain.match(/美元\s*USD\s+([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)/i);
   if (!m) throw new Error('USD spot selling rate not found');
   const rate=Number(m[2]);
   if (!(rate>0)) throw new Error('invalid USD selling rate');
@@ -51,7 +51,7 @@ function parseBankRate(text) {
 }
 function parseRepublished(text) {
   const plain=stripHtml(text);
-  const m=plain.match(/1美元\\s*=\\s*([0-9]+(?:\\.[0-9]+)?)元人民币/i);
+  const m=plain.match(/1美元\s*=\s*([0-9]+(?:\.[0-9]+)?)元人民币/i);
   if (!m) throw new Error('republished rate not found');
   const rate=Number(m[1]);
   if (!(rate>0)) throw new Error('invalid republished rate');
@@ -78,7 +78,7 @@ async function getUsdCny() {
 }
 async function ecbRate(currency) {
   const xml=await fetchText(ECB_DAILY_URL);
-  const u=xml.match(/<Cube\\s+currency=['"]USD['"]\\s+rate=['"]([0-9]+(?:\\.[0-9]+)?)['"]\\s*\\/>/i);
+  const u=xml.match(/<Cube\s+currency=['"]USD['"]\s+rate=['"]([0-9]+(?:\.[0-9]+)?)['"]\s*\/>/i);
   const usdPerEur=Number(u?.[1]);
   if (!(usdPerEur>0)) throw new Error('ECB USD reference unavailable');
   if (currency==='EUR') return usdPerEur;
@@ -160,8 +160,8 @@ async function handleApi(request, env) {
     await env.DB.prepare('INSERT INTO people(id,name,created_at) VALUES(?,?,?)').bind(person.id,person.name,person.created_at).run();
     return json({id:person.id,name:person.name},201);
   }
-  const personMatch=path.match(/^\\/api\\/people\\/([^/]+)$/);
-  const resetMatch=path.match(/^\\/api\\/people\\/([^/]+)\\/settlement-reset$/);
+  const personMatch=path.match(/^\/api\/people\/([^/]+)$/);
+  const resetMatch=path.match(/^\/api\/people\/([^/]+)\/settlement-reset$/);
   if (resetMatch && method==='DELETE') {
     const pid=decodeURIComponent(resetMatch[1]);
     const person=await env.DB.prepare('SELECT id,name FROM people WHERE id=?').bind(pid).first();
@@ -208,7 +208,7 @@ async function handleApi(request, env) {
     await env.DB.prepare('INSERT INTO bills(id,date,title,amount,payer_id,share_ids,note,currency,usd_amount) VALUES(?,?,?,?,?,?,?,?,?)').bind(bill.id,bill.date,bill.title,bill.amount,bill.payerId,JSON.stringify(bill.shareIds),bill.note,bill.currency,bill.usdAmount).run();
     return json({id:bill.id},201);
   }
-  const billMatch=path.match(/^\\/api\\/bills\\/([^/]+)$/);
+  const billMatch=path.match(/^\/api\/bills\/([^/]+)$/);
   if (billMatch && method==='PUT') {
     const bid=decodeURIComponent(billMatch[1]);
     const b=await request.json().catch(()=>({}));
