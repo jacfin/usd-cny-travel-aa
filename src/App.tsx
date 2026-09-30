@@ -703,13 +703,15 @@ function TravelAA() {
             </label>
           </div>
           <div className="fxControls">
-            {currency !== 'USD' ? (
+            {currency === 'CNY' ? (
+              <span className="fxTime success">CNY 直接记账，无需换算</span>
+            ) : currency !== 'USD' ? (
               <>
                 <button className="fetchRateButton" type="button" onClick={() => void loadMastercardRate(currency)} disabled={fxLoading}>
                   {fxLoading ? '获取中…' : '获取汇率'}
                 </button>
                 <span className={'fxTime ' + (fxRate ? 'success' : 'failure')}>
-                  {fxLoading ? '正在获取汇率…' : fxRate ? (currency === 'CNY' ? 'USD/CNY 已获取 · ' : 'Mastercard 汇率已获取 · ') + (fxFetchedAt || '') : '汇率获取失败，请重试'}
+                  {fxLoading ? '正在获取汇率…' : fxRate ? 'Mastercard 汇率已获取 · ' + (fxFetchedAt || '') : '汇率获取失败，请重试'}
                 </span>
               </>
             ) : (
