@@ -227,6 +227,7 @@ function TravelAA() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [settlementResets, setSettlementResets] = useState<Array<{personId:string; resetAt:string; adjustments:Record<string,number>}>>([]);
   const [settlementRate, setSettlementRate] = useState<number | null>(null);
+  const [settlementFeeEnabled, setSettlementFeeEnabled] = useState(() => localStorage.getItem('usd_cny_fee_enabled') === '1');
   const [tab, setTab] = useState<'add' | 'history' | 'settle'>('add');
   const [personName, setPersonName] = useState('');
   const [date, setDate] = useState(today);
@@ -567,13 +568,16 @@ function TravelAA() {
   }, [people, bills, settlementResets]);
 
   const settlementRateValue = settlementRate || 0;
+  const settlementFeeMultiplier = settlementFeeEnabled ? 1 + FIXED_FEE / 100 : 1;
   const settlementBalances = useMemo(() => {
     const out: Record<string, number> = {};
     people.forEach(p => {
-      out[p.id] = (balances.usd[p.id] || 0) * settlementRateValue + (balances.cny[p.id] || 0);
+      out[p.id] =
+        (balances.usd[p.id] || 0) * settlementRateValue * settlementFeeMultiplier +
+        (balances.cny[p.id] || 0);
     });
     return out;
-  }, [people, balances, settlementRateValue]);
+  }, [people, balances, settlementRateValue, settlementFeeMultiplier]);
 
   const transfers = useMemo(() => {
     const debtors = Object.entries(settlementBalances)
@@ -617,7 +621,10 @@ function TravelAA() {
     }
   };
   useEffect(() => {
-    if (tab === 'settle') void refreshSettlementRate();
+    if (tab === 'settle') {
+      setSettlementFeeEnabled(localStorage.getItem('usd_cny_fee_enabled') === '1');
+      void refreshSettlementRate();
+    }
   }, [tab]);
   const totalCny = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? b.amount : 0), 0);
   const totalUsd = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? 0 : (b.usdAmount ?? b.amount)), 0);
@@ -843,6 +850,21 @@ function TravelAA() {
           <p className="hint">
             CNY 账单始终按人民币记录；其他币种在录入时固定换算为 USD。进入本页时只刷新一次 USD/CNY，最终统一显示人民币。
           </p>
+          <div className="buttons">
+            <button type="button" onClick={() => void refreshSettlementRate()}>立即刷新</button>
+            <button
+              type="button"
+              className={settlementFeeEnabled ? 'active' : ''}
+              onClick={() => {
+                const next = !settlementFeeEnabled;
+                setSettlementFeeEnabled(next);
+                localStorage.setItem('usd_cny_fee_enabled', next ? '1' : '0');
+              }}
+            >
+              <span>提现手续费 +0.1%：</span>
+              <span>{settlementFeeEnabled ? '已启用' : '未启用'}</span>
+            </button>
+          </div>
           <div className="summary">
             <div>
               <span>累计账单</span>
