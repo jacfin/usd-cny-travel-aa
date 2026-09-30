@@ -31,8 +31,12 @@ async function initDb(env) {
     env.DB.prepare('CREATE TABLE IF NOT EXISTS bills (id TEXT PRIMARY KEY, date TEXT NOT NULL, title TEXT NOT NULL, amount REAL NOT NULL, payer_id TEXT NOT NULL, share_ids TEXT NOT NULL, note TEXT NOT NULL DEFAULT \'\', currency TEXT NOT NULL DEFAULT \'USD\', usd_amount REAL NOT NULL)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS bills_date_idx ON bills(date)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)'),
-    env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_resets (person_id TEXT PRIMARY KEY, reset_at TEXT NOT NULL)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_resets (person_id TEXT PRIMARY KEY, reset_at TEXT NOT NULL, adjustments TEXT NOT NULL DEFAULT \'{}\')'),
   ]);
+  const resetCols=await env.DB.prepare('PRAGMA table_info(settlement_resets)').all();
+  if (!resetCols.results.some(x=>x.name==='adjustments')) {
+    await env.DB.prepare("ALTER TABLE settlement_resets ADD COLUMN adjustments TEXT NOT NULL DEFAULT '{}'").run();
+  }
   await migrateLegacyData(env);
   dbReady = true;
 }
@@ -171,6 +175,39 @@ async function listBills(env) {
   return r.results.map(billRow);
 }
 
+
+function calculateBalances(people,bills,resets) {
+  const result={};
+  for (const p of people) result[p.id]=0;
+  for (const b of bills) {
+    const billUsd=Number(b.usdAmount??b.amount);
+    const each=billUsd/b.shareIds.length;
+    result[b.payerId]=(result[b.payerId]||0)+billUsd;
+    for (const id of b.shareIds) result[id]=(result[id]||0)-each;
+  }
+  for (const reset of resets) {
+    const adjustments=reset?.adjustments||{};
+    for (const [pid,value] of Object.entries(adjustments)) {
+      result[pid]=(result[pid]||0)+Number(value||0);
+    }
+  }
+  return result;
+}
+function calculateTransfers(balances) {
+  const debtors=Object.entries(balances).filter(x=>x[1]<-0.005).map(x=>({id:x[0],value:-x[1]})).sort((a,b)=>b.value-a.value);
+  const creditors=Object.entries(balances).filter(x=>x[1]>0.005).map(x=>({id:x[0],value:x[1]})).sort((a,b)=>b.value-a.value);
+  const result=[];
+  let i=0,j=0;
+  while(i<debtors.length&&j<creditors.length){
+    const value=Math.min(debtors[i].value,creditors[j].value);
+    if(value>0.005) result.push({from:debtors[i].id,to:creditors[j].id,amount:value});
+    debtors[i].value-=value; creditors[j].value-=value;
+    if(debtors[i].value<0.005)i++;
+    if(creditors[j].value<0.005)j++;
+  }
+  return result;
+}
+
 async function handleApi(request, env) {
   await initDb(env);
   const u=new URL(request.url);
@@ -191,8 +228,12 @@ async function handleApi(request, env) {
 
   if (method==='GET' && path==='/api/people') return json({people:await listPeople(env)});
   if (method==='GET' && path==='/api/settlement-resets') {
-    const r=await env.DB.prepare('SELECT person_id FROM settlement_resets').all();
-    return json({personIds:r.results.map(x=>String(x.person_id))});
+    const r=await env.DB.prepare('SELECT person_id,reset_at,adjustments FROM settlement_resets').all();
+    return json({resets:r.results.map(x=>({
+      personId:String(x.person_id),
+      resetAt:String(x.reset_at||''),
+      adjustments:JSON.parse(x.adjustments||'{}')
+    }))});
   }
   if (method==='POST' && path==='/api/people') {
     const b=await request.json().catch(()=>({}));
@@ -210,8 +251,54 @@ async function handleApi(request, env) {
     const pid=decodeURIComponent(resetMatch[1]);
     const person=await env.DB.prepare('SELECT id,name FROM people WHERE id=?').bind(pid).first();
     if (!person) return fail('person not found',404);
-    await env.DB.prepare('INSERT OR REPLACE INTO settlement_resets(person_id,reset_at) VALUES(?,?)').bind(pid,new Date().toISOString()).run();
-    return json({ok:true,personId:pid,name:person.name});
+
+    const people=await listPeople(env);
+    const bills=await listBills(env);
+    const resetRows=await env.DB.prepare('SELECT person_id,reset_at,adjustments FROM settlement_resets').all();
+    const resets=resetRows.results.map(x=>({
+      personId:String(x.person_id),
+      resetAt:String(x.reset_at||''),
+      adjustments:JSON.parse(x.adjustments||'{}')
+    }));
+    const balances=calculateBalances(people,bills,resets);
+    const transfers=calculateTransfers(balances);
+    const related=transfers.filter(t=>t.from===pid||t.to===pid);
+
+    if (!related.length) {
+      return json({ok:true,personId:pid,name:person.name,amount:0,message:'该人员当前已经结清，无需重复重置。'});
+    }
+
+    const adjustments={};
+    for (const t of related) {
+      if (t.from===pid) {
+        adjustments[pid]=(adjustments[pid]||0)+t.amount;
+        adjustments[t.to]=(adjustments[t.to]||0)-t.amount;
+      } else {
+        adjustments[pid]=(adjustments[pid]||0)-t.amount;
+        adjustments[t.from]=(adjustments[t.from]||0)+t.amount;
+      }
+    }
+
+    const existing=await env.DB.prepare('SELECT adjustments FROM settlement_resets WHERE person_id=?').bind(pid).first();
+    const merged=existing ? JSON.parse(existing.adjustments||'{}') : {};
+    // The merged adjustment history is kept permanently so later new bills
+    // are added on top of the already-settled historical amount.
+    for (const [id,value] of Object.entries(adjustments)) {
+      merged[id]=(Number(merged[id]||0)+Number(value||0));
+      if (Math.abs(merged[id])<0.000001) delete merged[id];
+    }
+
+    await env.DB.prepare(
+      'INSERT OR REPLACE INTO settlement_resets(person_id,reset_at,adjustments) VALUES(?,?,?)'
+    ).bind(pid,new Date().toISOString(),JSON.stringify(merged)).run();
+
+    return json({
+      ok:true,
+      personId:pid,
+      name:person.name,
+      amount:Math.abs(balances[pid]||0),
+      adjustments
+    });
   }
   if (personMatch && method==='PUT') {
     const pid=decodeURIComponent(personMatch[1]);
@@ -241,9 +328,6 @@ async function handleApi(request, env) {
     if (!(usd>0)) return fail('invalid usdAmount',400);
     const bill={id:id(),date:String(b.date),title:String(b.title).trim(),amount:Number(b.amount),payerId:String(b.payerId),shareIds:b.shareIds.map(String),note:String(b.note||''),currency:String(b.currency||'USD'),usdAmount:usd};
     await env.DB.prepare('INSERT INTO bills(id,date,title,amount,payer_id,share_ids,note,currency,usd_amount) VALUES(?,?,?,?,?,?,?,?,?)').bind(bill.id,bill.date,bill.title,bill.amount,bill.payerId,JSON.stringify(bill.shareIds),bill.note,bill.currency,bill.usdAmount).run();
-    for (const pid of new Set([bill.payerId,...bill.shareIds])) {
-      await env.DB.prepare('DELETE FROM settlement_resets WHERE person_id=?').bind(pid).run();
-    }
     return json({id:bill.id},201);
   }
   const billMatch=path.match(/^\/api\/bills\/([^/]+)$/);
@@ -254,11 +338,6 @@ async function handleApi(request, env) {
     const usd=Number(b.usdAmount ?? b.amount);
     if (!(usd>0)) return fail('invalid usdAmount',400);
     const r=await env.DB.prepare('UPDATE bills SET date=?,title=?,amount=?,payer_id=?,share_ids=?,note=?,currency=?,usd_amount=? WHERE id=?').bind(String(b.date),String(b.title).trim(),Number(b.amount),String(b.payerId),JSON.stringify(b.shareIds.map(String)),String(b.note||''),String(b.currency||'USD'),usd,bid).run();
-    if (r.meta?.changes) {
-      for (const pid of new Set([String(b.payerId),...b.shareIds.map(String)])) {
-        await env.DB.prepare('DELETE FROM settlement_resets WHERE person_id=?').bind(pid).run();
-      }
-    }
     return r.meta?.changes ? json({ok:true}) : fail('bill not found',404);
   }
   if (method==='DELETE' && path==='/api/bills') {
