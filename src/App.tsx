@@ -606,7 +606,7 @@ function TravelAA() {
       if (creditors[j].value < 0.005) j++;
     }
     return result;
-  }, [balances]);
+  }, [settlementBalances]);
 
   const personNameOf = (id: string) =>
     people.find(p => p.id === id)?.name || '未知人员';
@@ -905,7 +905,7 @@ function TravelAA() {
                 <div className="empty">目前已经全部平账。</div>
               )}
               <div className="buttons">
-                <button type="button" onClick={() => void refreshSettlementRate()}>立即刷新</button>
+                <button type="button" onClick={() => void refreshSettlementRate()}>汇率刷新</button>
                 <button
                   type="button"
                   className={settlementFeeEnabled ? 'active' : ''}
