@@ -598,13 +598,13 @@ function TravelAA() {
           className={tab === 'history' ? 'active' : ''}
           onClick={() => setTab('history')}
         >
-          ② 账单明细
+          账单明细
         </button>
         <button
           className={tab === 'settle' ? 'active' : ''}
           onClick={() => setTab('settle')}
         >
-          ③ AA 结算
+          AA 结算
         </button>
       </nav>
       {error && (
