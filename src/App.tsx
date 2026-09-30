@@ -52,7 +52,7 @@ function ConverterPage() {
       applyRate(data);
       setStatus(data.stale ? '交通银行暂时不可用，显示上次成功值' : data.cached ? '交通银行汇率已快速加载' : '交通银行实时汇率已更新');
     } catch {
-      setStatus('交通银行美元现汇卖出价获取失败，请点击“立即刷新”重试');
+      setStatus('交通银行美元现汇卖出价获取失败，请点击“汇率刷新”重试');
     }
   };
 
@@ -161,7 +161,7 @@ function ConverterPage() {
             <span>提现手续费 +0.1%：</span>
             <span>{feeEnabled ? '已启用' : '未启用'}</span>
           </button>
-          <button onClick={() => void loadUsdCny(true)}>立即刷新</button>
+          <button onClick={() => void loadUsdCny(true)}>汇率刷新</button>
         </div>
         <p className={status.includes('失败') || status.includes('无法') ? 'status err' : 'status'}>
           {status}{updatedAt ? ` · ${new Date(updatedAt).toLocaleString('zh-CN', { hour12: false })}` : ''}
