@@ -237,8 +237,8 @@ async function handleApi(request, env) {
   if (method==='POST' && path==='/api/bills') {
     const b=await request.json().catch(()=>({}));
     if (!b?.date || !b?.title || !(Number(b.amount)>0) || !b?.payerId || !Array.isArray(b.shareIds) || !b.shareIds.length) return fail('invalid bill',400);
-    const usd=Number(b.usdAmount ?? b.amount);
-    if (!(usd>0)) return fail('invalid usdAmount',400);
+    const usd=String(b.currency||'USD').toUpperCase()==='CNY' ? 0 : Number(b.usdAmount ?? b.amount);
+    if (String(b.currency||'USD').toUpperCase()!=='CNY' && !(usd>0)) return fail('invalid usdAmount',400);
     const bill={id:id(),date:String(b.date),title:String(b.title).trim(),amount:Number(b.amount),payerId:String(b.payerId),shareIds:b.shareIds.map(String),note:String(b.note||''),currency:String(b.currency||'USD'),usdAmount:usd};
     await env.DB.prepare('INSERT INTO bills(id,date,title,amount,payer_id,share_ids,note,currency,usd_amount) VALUES(?,?,?,?,?,?,?,?,?)').bind(bill.id,bill.date,bill.title,bill.amount,bill.payerId,JSON.stringify(bill.shareIds),bill.note,bill.currency,bill.usdAmount).run();
     return json({id:bill.id},201);
