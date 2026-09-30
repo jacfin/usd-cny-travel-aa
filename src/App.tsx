@@ -581,8 +581,6 @@ function TravelAA() {
     return result;
   }, [settlementBalances]);
 
-  const [settlementRate, setSettlementRate] = useState<number | null>(null);
-  const [settlementRateUpdatedAt, setSettlementRateUpdatedAt] = useState('');
   const refreshSettlementRate = async () => {
     try {
       const response = await api.get('/api/rates/usd-cny?force=1');
