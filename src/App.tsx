@@ -533,69 +533,6 @@ function TravelAA() {
   };
 
   const [settlementRate, setSettlementRate] = useState<number | null>(null);
-  const [settlementRateUpdatedAt, setSettlementRateUpdatedAt] = useState('');
-  const settlementRateValue = settlementRate || rate || 0;
-
-  const refreshSettlementRate = async () => {
-    try {
-      const response = await api.get('/api/rates/usd-cny?force=1');
-      const data = response.data as RateResponse;
-      if (!(data.rate > 0)) throw new Error('invalid rate');
-      setSettlementRate(data.rate); setSettlementRateUpdatedAt(data.updatedAt);
-      setRate(data.rate); setSource(data.source); setUpdatedAt(data.updatedAt);
-      try { localStorage.setItem('usd_cny_last_rate', String(data.rate)); } catch {}
-    } catch {
-      const cached = Number(localStorage.getItem('usd_cny_last_rate'));
-      if (cached > 0) setSettlementRate(cached);
-    }
-  };
-
-  useEffect(() => { if (tab === 'settle') void refreshSettlementRate(); }, [tab]);
-
-  const balances = useMemo(() => {
-    const validIds = new Set(people.map(p => p.id));
-    const usd: Record<string, number> = {};
-    const cny: Record<string, number> = {};
-    people.forEach(p => { usd[p.id] = 0; cny[p.id] = 0; });
-    bills.forEach(b => {
-      if (!validIds.has(b.payerId)) return;
-      const ids = b.shareIds.filter(id => validIds.has(id));
-      if (!ids.length) return;
-      const isCny = b.currency === 'CNY';
-      const amountValue = Number(isCny ? b.amount : (b.usdAmount ?? b.amount));
-      const target = isCny ? cny : usd;
-      const each = amountValue / ids.length;
-      target[b.payerId] += amountValue;
-      ids.forEach(id => { target[id] -= each; });
-    });
-    settlementResets.forEach(reset => {
-      Object.entries(reset.adjustments || {}).forEach(([id, value]) => { if (validIds.has(id)) usd[id] += Number(value || 0); });
-      Object.entries(reset.cnyAdjustments || {}).forEach(([id, value]) => { if (validIds.has(id)) cny[id] += Number(value || 0); });
-    });
-    return { usd, cny };
-  }, [people, bills, settlementResets]);
-
-  const settlementBalances = useMemo(() => {
-    const out: Record<string, number> = {};
-    people.forEach(p => { out[p.id] = (balances.usd[p.id] || 0) * settlementRateValue + (balances.cny[p.id] || 0); });
-    return out;
-  }, [people, balances, settlementRateValue]);
-
-  const transfers = useMemo(() => {
-    const debtors = Object.entries(settlementBalances).filter(x => x[1] < -0.005).map(x => ({ id: x[0], value: -x[1] })).sort((a, b) => b.value - a.value);
-    const creditors = Object.entries(settlementBalances).filter(x => x[1] > 0.005).map(x => ({ id: x[0], value: x[1] })).sort((a, b) => b.value - a.value);
-    const result: Array<{ from: string; to: string; amount: number }> = [];
-    let i = 0, j = 0;
-    while (i < debtors.length && j < creditors.length) {
-      const value = Math.min(debtors[i].value, creditors[j].value);
-      if (value > 0.005) result.push({ from: debtors[i].id, to: creditors[j].id, amount: value });
-      debtors[i].value -= value; creditors[j].value -= value;
-      if (debtors[i].value < 0.005) i++;
-      if (creditors[j].value < 0.005) j++;
-    }
-    return result;
-  }, [settlementBalances]);
-
   const totalUsd = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? 0 : (b.usdAmount ?? b.amount)), 0);
   const totalCny = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? b.amount : 0), 0) + totalUsd * settlementRateValue;
   const personNameOf = (id: string) =>
