@@ -615,7 +615,7 @@ function TravelAA() {
       }));
     setSaving(true);
     try {
-      await api.delete('/api/people/' + encodeURIComponent(person.id) + '/settlement-reset', {
+      await api.post('/api/people/' + encodeURIComponent(person.id) + '/settlement-reset', {
         data: {
           usdAdjustment: -(balances.usd[person.id] || 0),
           cnyAdjustment: -(balances.cny[person.id] || 0),
