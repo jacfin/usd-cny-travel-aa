@@ -32,6 +32,8 @@ async function initDb(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS bills_date_idx ON bills(date)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_resets (person_id TEXT PRIMARY KEY, reset_at TEXT NOT NULL)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_reset_records (id TEXT PRIMARY KEY, person_id TEXT NOT NULL, reset_at TEXT NOT NULL, usd_adjustment REAL NOT NULL DEFAULT 0, cny_adjustment REAL NOT NULL DEFAULT 0, transfers_json TEXT NOT NULL DEFAULT \'[]\')'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS settlement_reset_records_time_idx ON settlement_reset_records(reset_at)'),
   ]);
   await migrateLegacyData(env);
   dbReady = true;
@@ -191,8 +193,17 @@ async function handleApi(request, env) {
 
   if (method==='GET' && path==='/api/people') return json({people:await listPeople(env)});
   if (method==='GET' && path==='/api/settlement-resets') {
-    const r=await env.DB.prepare('SELECT person_id FROM settlement_resets').all();
-    return json({personIds:r.results.map(x=>String(x.person_id))});
+    const r=await env.DB.prepare('SELECT id,person_id,reset_at,usd_adjustment,cny_adjustment,transfers_json FROM settlement_reset_records ORDER BY reset_at ASC').all();
+    return json({
+      resets:r.results.map(x => ({
+        id:String(x.id),
+        personId:String(x.person_id),
+        resetAt:String(x.reset_at),
+        usdAdjustment:Number(x.usd_adjustment||0),
+        cnyAdjustment:Number(x.cny_adjustment||0),
+        transfers:JSON.parse(x.transfers_json||'[]'),
+      }))
+    });
   }
   if (method==='POST' && path==='/api/people') {
     const b=await request.json().catch(()=>({}));
@@ -210,8 +221,17 @@ async function handleApi(request, env) {
     const pid=decodeURIComponent(resetMatch[1]);
     const person=await env.DB.prepare('SELECT id,name FROM people WHERE id=?').bind(pid).first();
     if (!person) return fail('person not found',404);
-    await env.DB.prepare('INSERT OR REPLACE INTO settlement_resets(person_id,reset_at) VALUES(?,?)').bind(pid,new Date().toISOString()).run();
-    return json({ok:true,personId:pid,name:person.name});
+    const b=await request.json().catch(()=>({}));
+    const usdAdjustment=Number(b?.usdAdjustment||0);
+    const cnyAdjustment=Number(b?.cnyAdjustment||0);
+    const transfers=Array.isArray(b?.transfers) ? b.transfers.slice(0,50) : [];
+    const resetAt=new Date().toISOString();
+    const recordId=id();
+    await env.DB.batch([
+      env.DB.prepare('INSERT OR REPLACE INTO settlement_resets(person_id,reset_at) VALUES(?,?)').bind(pid,resetAt),
+      env.DB.prepare('INSERT INTO settlement_reset_records(id,person_id,reset_at,usd_adjustment,cny_adjustment,transfers_json) VALUES(?,?,?,?,?,?)').bind(recordId,pid,resetAt,usdAdjustment,cnyAdjustment,JSON.stringify(transfers))
+    ]);
+    return json({ok:true,recordId,personId:pid,name:person.name,resetAt});
   }
   if (personMatch && method==='PUT') {
     const pid=decodeURIComponent(personMatch[1]);
