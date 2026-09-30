@@ -31,15 +31,8 @@ async function initDb(env) {
     env.DB.prepare('CREATE TABLE IF NOT EXISTS bills (id TEXT PRIMARY KEY, date TEXT NOT NULL, title TEXT NOT NULL, amount REAL NOT NULL, payer_id TEXT NOT NULL, share_ids TEXT NOT NULL, note TEXT NOT NULL DEFAULT \'\', currency TEXT NOT NULL DEFAULT \'USD\', usd_amount REAL NOT NULL)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS bills_date_idx ON bills(date)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)'),
-    env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_resets (person_id TEXT PRIMARY KEY, reset_at TEXT NOT NULL, adjustments TEXT NOT NULL DEFAULT \'{}\')'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_resets (person_id TEXT PRIMARY KEY, reset_at TEXT NOT NULL)'),
   ]);
-  const resetCols=await env.DB.prepare('PRAGMA table_info(settlement_resets)').all();
-  if (!resetCols.results.some(x=>x.name==='adjustments')) {
-    await env.DB.prepare("ALTER TABLE settlement_resets ADD COLUMN adjustments TEXT NOT NULL DEFAULT '{}'").run();
-  }
-  if (!resetCols.results.some(x=>x.name==='cny_adjustments')) {
-    await env.DB.prepare("ALTER TABLE settlement_resets ADD COLUMN cny_adjustments TEXT NOT NULL DEFAULT '{}'").run();
-  }
   await migrateLegacyData(env);
   dbReady = true;
 }
@@ -104,8 +97,8 @@ function parseRepublished(text) {
   if (!(rate>0)) throw new Error('invalid republished rate');
   return rate;
 }
-async function getUsdCny(force=false) {
-  if (!force && usdCache && Date.now()-usdCache.cachedAt < 3600000) return { ...usdCache, cached:true };
+async function getUsdCny() {
+  if (usdCache && Date.now()-usdCache.cachedAt < 3600000) return { ...usdCache, cached:true };
   for (const url of BANK_URLS) {
     try {
       const rate=parseBankRate(await fetchText(url));
@@ -178,38 +171,6 @@ async function listBills(env) {
   return r.results.map(billRow);
 }
 
-
-function calculateBalances(people,bills,resets) {
-  const result={};
-  for (const p of people) result[p.id]=0;
-  for (const b of bills) {
-    const amount=String(b.currency||'USD').toUpperCase()==='CNY' ? Number(b.amount) : Number(b.usdAmount ?? b.amount);
-    const ids=b.shareIds.filter(id=>result[id]!==undefined);
-    if (result[b.payerId]===undefined || !ids.length) continue;
-    const each=amount/ids.length;
-    result[b.payerId]+=amount;
-    for (const id of ids) result[id]-=each;
-  }
-  for (const reset of resets) {
-    for (const [id,v] of Object.entries(reset.adjustments||{})) if (result[id]!==undefined) result[id]+=Number(v||0);
-  }
-  return result;
-}
-function calculateTransfers(balances) {
-  const debtors=Object.entries(balances).filter(x=>x[1]<-0.005).map(x=>({id:x[0],value:-x[1]})).sort((a,b)=>b.value-a.value);
-  const creditors=Object.entries(balances).filter(x=>x[1]>0.005).map(x=>({id:x[0],value:x[1]})).sort((a,b)=>b.value-a.value);
-  const result=[];
-  let i=0,j=0;
-  while(i<debtors.length&&j<creditors.length){
-    const value=Math.min(debtors[i].value,creditors[j].value);
-    if(value>0.005) result.push({from:debtors[i].id,to:creditors[j].id,amount:value});
-    debtors[i].value-=value; creditors[j].value-=value;
-    if(debtors[i].value<0.005)i++;
-    if(creditors[j].value<0.005)j++;
-  }
-  return result;
-}
-
 async function handleApi(request, env) {
   await initDb(env);
   const u=new URL(request.url);
@@ -217,7 +178,7 @@ async function handleApi(request, env) {
   const method=request.method;
 
   if (method==='GET' && path==='/api/rates/usd-cny') {
-    try { return json(await getUsdCny(u.searchParams.get('force')==='1')); } catch(e) { return fail(e?.message||'rate unavailable',503); }
+    try { return json(await getUsdCny()); } catch(e) { return fail(e?.message||'rate unavailable',503); }
   }
   if (method==='GET' && path==='/api/rates/mastercard') {
     const currency=(u.searchParams.get('currency')||'EUR').toUpperCase();
@@ -230,13 +191,8 @@ async function handleApi(request, env) {
 
   if (method==='GET' && path==='/api/people') return json({people:await listPeople(env)});
   if (method==='GET' && path==='/api/settlement-resets') {
-    const r=await env.DB.prepare('SELECT person_id,reset_at,adjustments FROM settlement_resets').all();
-    return json({resets:r.results.map(x=>({
-      personId:String(x.person_id),
-      resetAt:String(x.reset_at||''),
-      adjustments:JSON.parse(x.adjustments||'{}'),
-      cnyAdjustments:JSON.parse(x.cny_adjustments||'{}')
-    }))});
+    const r=await env.DB.prepare('SELECT person_id FROM settlement_resets').all();
+    return json({personIds:r.results.map(x=>String(x.person_id))});
   }
   if (method==='POST' && path==='/api/people') {
     const b=await request.json().catch(()=>({}));
@@ -254,50 +210,8 @@ async function handleApi(request, env) {
     const pid=decodeURIComponent(resetMatch[1]);
     const person=await env.DB.prepare('SELECT id,name FROM people WHERE id=?').bind(pid).first();
     if (!person) return fail('person not found',404);
-    const settlementRate=Number(u.searchParams.get('rate')||0);
-    if (!(settlementRate>0)) return fail('settlement rate required',400);
-    const people=await listPeople(env);
-    const bills=await listBills(env);
-    const resetRows=await env.DB.prepare('SELECT person_id,reset_at,adjustments,cny_adjustments FROM settlement_resets').all();
-    const usd={}, cny={};
-    for (const p of people) { usd[p.id]=0; cny[p.id]=0; }
-    for (const b of bills) {
-      if (usd[b.payerId]===undefined) continue;
-      const ids=b.shareIds.filter(id=>usd[id]!==undefined);
-      if (!ids.length) continue;
-      const target=String(b.currency||'USD').toUpperCase()==='CNY' ? cny : usd;
-      const amount=Number(b.currency||'USD').toUpperCase()==='CNY' ? Number(b.amount) : Number(b.usdAmount ?? b.amount);
-      const each=amount/ids.length;
-      target[b.payerId]+=amount;
-      for (const id of ids) target[id]-=each;
-    }
-    for (const row of resetRows.results) {
-      const a=JSON.parse(row.adjustments||'{}');
-      const ca=JSON.parse(row.cny_adjustments||'{}');
-      for (const [id,v] of Object.entries(a)) if (usd[id]!==undefined) usd[id]+=Number(v||0);
-      for (const [id,v] of Object.entries(ca)) if (cny[id]!==undefined) cny[id]+=Number(v||0);
-    }
-    const combined={};
-    for (const p of people) combined[p.id]=usd[p.id]*settlementRate+cny[p.id];
-    const transfers=calculateTransfers(combined);
-    const related=transfers.filter(t=>t.from===pid||t.to===pid);
-    if (!related.length) return json({ok:true,personId:pid,name:person.name,amount:0,message:'该人员当前已经结清，无需重复重置。'});
-    const cnyAdjustments={};
-    for (const t of related) {
-      if (t.from===pid) {
-        cnyAdjustments[pid]=(cnyAdjustments[pid]||0)+t.amount;
-        cnyAdjustments[t.to]=(cnyAdjustments[t.to]||0)-t.amount;
-      } else {
-        cnyAdjustments[pid]=(cnyAdjustments[pid]||0)-t.amount;
-        cnyAdjustments[t.from]=(cnyAdjustments[t.from]||0)+t.amount;
-      }
-    }
-    const existing=await env.DB.prepare('SELECT adjustments,cny_adjustments FROM settlement_resets WHERE person_id=?').bind(pid).first();
-    const merged=existing ? JSON.parse(existing.adjustments||'{}') : {};
-    const mergedCny=existing ? JSON.parse(existing.cny_adjustments||'{}') : {};
-    await env.DB.prepare('INSERT OR REPLACE INTO settlement_resets(person_id,reset_at,adjustments,cny_adjustments) VALUES(?,?,?,?)')
-      .bind(pid,new Date().toISOString(),JSON.stringify(merged),JSON.stringify(Object.fromEntries(Object.entries(cnyAdjustments).map(([id,v])=>[id,Number(mergedCny[id]||0)+Number(v)])))).run();
-    return json({ok:true,personId:pid,name:person.name,amount:Math.abs(combined[pid]||0),cnyAdjustments});
+    await env.DB.prepare('INSERT OR REPLACE INTO settlement_resets(person_id,reset_at) VALUES(?,?)').bind(pid,new Date().toISOString()).run();
+    return json({ok:true,personId:pid,name:person.name});
   }
   if (personMatch && method==='PUT') {
     const pid=decodeURIComponent(personMatch[1]);
@@ -323,10 +237,9 @@ async function handleApi(request, env) {
   if (method==='POST' && path==='/api/bills') {
     const b=await request.json().catch(()=>({}));
     if (!b?.date || !b?.title || !(Number(b.amount)>0) || !b?.payerId || !Array.isArray(b.shareIds) || !b.shareIds.length) return fail('invalid bill',400);
-    const currency=String(b.currency||'USD').toUpperCase();
-    const usd=currency==='CNY' ? 0 : Number(b.usdAmount ?? b.amount);
-    if (currency!=='CNY' && !(usd>0)) return fail('invalid usdAmount',400);
-    const bill={id:id(),date:String(b.date),title:String(b.title).trim(),amount:Number(b.amount),payerId:String(b.payerId),shareIds:b.shareIds.map(String),note:String(b.note||''),currency,usdAmount:usd};
+    const usd=Number(b.usdAmount ?? b.amount);
+    if (!(usd>0)) return fail('invalid usdAmount',400);
+    const bill={id:id(),date:String(b.date),title:String(b.title).trim(),amount:Number(b.amount),payerId:String(b.payerId),shareIds:b.shareIds.map(String),note:String(b.note||''),currency:String(b.currency||'USD'),usdAmount:usd};
     await env.DB.prepare('INSERT INTO bills(id,date,title,amount,payer_id,share_ids,note,currency,usd_amount) VALUES(?,?,?,?,?,?,?,?,?)').bind(bill.id,bill.date,bill.title,bill.amount,bill.payerId,JSON.stringify(bill.shareIds),bill.note,bill.currency,bill.usdAmount).run();
     return json({id:bill.id},201);
   }
@@ -335,10 +248,9 @@ async function handleApi(request, env) {
     const bid=decodeURIComponent(billMatch[1]);
     const b=await request.json().catch(()=>({}));
     if (!b?.date || !b?.title || !(Number(b.amount)>0) || !b?.payerId || !Array.isArray(b.shareIds) || !b.shareIds.length) return fail('invalid bill',400);
-    const currency=String(b.currency||'USD').toUpperCase();
-    const usd=currency==='CNY' ? 0 : Number(b.usdAmount ?? b.amount);
-    if (currency!=='CNY' && !(usd>0)) return fail('invalid usdAmount',400);
-    const r=await env.DB.prepare('UPDATE bills SET date=?,title=?,amount=?,payer_id=?,share_ids=?,note=?,currency=?,usd_amount=? WHERE id=?').bind(String(b.date),String(b.title).trim(),Number(b.amount),String(b.payerId),JSON.stringify(b.shareIds.map(String)),String(b.note||''),currency,usd,bid).run();
+    const usd=Number(b.usdAmount ?? b.amount);
+    if (!(usd>0)) return fail('invalid usdAmount',400);
+    const r=await env.DB.prepare('UPDATE bills SET date=?,title=?,amount=?,payer_id=?,share_ids=?,note=?,currency=?,usd_amount=? WHERE id=?').bind(String(b.date),String(b.title).trim(),Number(b.amount),String(b.payerId),JSON.stringify(b.shareIds.map(String)),String(b.note||''),String(b.currency||'USD'),usd,bid).run();
     return r.meta?.changes ? json({ok:true}) : fail('bill not found',404);
   }
   if (method==='DELETE' && path==='/api/bills') {
