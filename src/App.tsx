@@ -485,7 +485,7 @@ function TravelAA() {
     if (!person) return;
     setSaving(true);
     try {
-      await api.delete('/api/people/' + person.id + '/settlement-reset');
+      await api.delete('/api/people/' + person.id + '/settlement-reset?rate=' + encodeURIComponent(String(settlementRateValue)));
       await load();
       setPersonResetTarget(null);
       resetForm();
@@ -536,28 +536,37 @@ function TravelAA() {
 
   const balances = useMemo(() => {
     const validIds = new Set(people.map(p => p.id));
-    const result: Record<string, number> = {};
-    people.forEach(p => { result[p.id] = 0; });
+    const usd: Record<string, number> = {};
+    const cny: Record<string, number> = {};
+    people.forEach(p => { usd[p.id] = 0; cny[p.id] = 0; });
     bills.forEach(b => {
       if (!validIds.has(b.payerId)) return;
-      const validShareIds = b.shareIds.filter(id => validIds.has(id));
-      if (!validShareIds.length) return;
-      const billUsd = Number(b.usdAmount ?? b.amount);
-      const each = billUsd / validShareIds.length;
-      result[b.payerId] += billUsd;
-      validShareIds.forEach(id => { result[id] -= each; });
+      const ids = b.shareIds.filter(id => validIds.has(id));
+      if (!ids.length) return;
+      const isCny = b.currency === 'CNY';
+      const amountValue = Number(isCny ? b.amount : (b.usdAmount ?? b.amount));
+      const target = isCny ? cny : usd;
+      const each = amountValue / ids.length;
+      target[b.payerId] += amountValue;
+      ids.forEach(id => { target[id] -= each; });
     });
     settlementResets.forEach(reset => {
-      Object.entries(reset.adjustments || {}).forEach(([id, value]) => {
-        if (validIds.has(id)) result[id] += Number(value || 0);
-      });
+      Object.entries(reset.adjustments || {}).forEach(([id, value]) => { if (validIds.has(id)) usd[id] += Number(value || 0); });
+      Object.entries(reset.cnyAdjustments || {}).forEach(([id, value]) => { if (validIds.has(id)) cny[id] += Number(value || 0); });
     });
-    return result;
+    return { usd, cny };
   }, [people, bills, settlementResets]);
 
+  const settlementRateValue = settlementRate || rate || 0;
+  const settlementBalances = useMemo(() => {
+    const out: Record<string, number> = {};
+    people.forEach(p => { out[p.id] = (balances.usd[p.id] || 0) * settlementRateValue + (balances.cny[p.id] || 0); });
+    return out;
+  }, [people, balances, settlementRateValue]);
+
   const transfers = useMemo(() => {
-    const debtors = Object.entries(balances).filter(x => x[1] < -0.005).map(x => ({ id: x[0], value: -x[1] })).sort((a, b) => b.value - a.value);
-    const creditors = Object.entries(balances).filter(x => x[1] > 0.005).map(x => ({ id: x[0], value: x[1] })).sort((a, b) => b.value - a.value);
+    const debtors = Object.entries(settlementBalances).filter(x => x[1] < -0.005).map(x => ({ id: x[0], value: -x[1] })).sort((a, b) => b.value - a.value);
+    const creditors = Object.entries(settlementBalances).filter(x => x[1] > 0.005).map(x => ({ id: x[0], value: x[1] })).sort((a, b) => b.value - a.value);
     const result: Array<{ from: string; to: string; amount: number }> = [];
     let i = 0, j = 0;
     while (i < debtors.length && j < creditors.length) {
@@ -568,7 +577,7 @@ function TravelAA() {
       if (creditors[j].value < 0.005) j++;
     }
     return result;
-  }, [balances]);
+  }, [settlementBalances]);
 
   const [settlementRate, setSettlementRate] = useState<number | null>(null);
   const [settlementRateUpdatedAt, setSettlementRateUpdatedAt] = useState('');
@@ -577,24 +586,19 @@ function TravelAA() {
       const response = await api.get('/api/rates/usd-cny?force=1');
       const data = response.data as RateResponse;
       if (!(data.rate > 0)) throw new Error('invalid rate');
-      setSettlementRate(data.rate);
-      setSettlementRateUpdatedAt(data.updatedAt);
-      setRate(data.rate);
-      setSource(data.source);
-      setUpdatedAt(data.updatedAt);
+      setSettlementRate(data.rate); setSettlementRateUpdatedAt(data.updatedAt);
+      setRate(data.rate); setSource(data.source); setUpdatedAt(data.updatedAt);
+      try { localStorage.setItem('usd_cny_last_rate', String(data.rate)); } catch {}
     } catch {
       const cached = Number(localStorage.getItem('usd_cny_last_rate'));
       if (cached > 0) setSettlementRate(cached);
     }
   };
 
-  useEffect(() => {
-    if (tab === 'settle') void refreshSettlementRate();
-  }, [tab]);
+  useEffect(() => { if (tab === 'settle') void refreshSettlementRate(); }, [tab]);
 
-  const totalUsd = bills.reduce((sum, b) => sum + (b.usdAmount ?? b.amount), 0);
-  const settlementRateValue = settlementRate || rate || 0;
-  const totalCny = totalUsd * settlementRateValue;
+  const totalUsd = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? 0 : (b.usdAmount ?? b.amount)), 0);
+  const totalCny = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? b.amount : 0), 0) + totalUsd * settlementRateValue;
   const personNameOf = (id: string) =>
     people.find(p => p.id === id)?.name || '未知人员';
 
@@ -809,7 +813,7 @@ function TravelAA() {
         <section className="card">
           <h2>AA 最终结算</h2>
           <p className="hint">
-            每笔账单只在录入时换算一次 USD；最终分账显示人民币，并按当前 USD/CNY 牌价换算。进入 AA 结算页面时刷新一次 USD/CNY。
+            非人民币账单在录入时只换算一次 USD；人民币账单直接保存人民币，不做换汇。最终分账统一显示人民币：非人民币部分按当前 USD/CNY 换算，人民币部分保持原金额不变。每次进入 AA 结算页面时刷新一次 USD/CNY。
           </p>
           <div className="summary">
             <div>
@@ -832,7 +836,7 @@ function TravelAA() {
               </div>
               <div className="balances">
                 {people.map(p => {
-                  const valueCny = (balances[p.id] || 0) * settlementRateValue;
+                  const valueCny = settlementBalances[p.id] || 0;
                   return (
                     <div className="balance" key={p.id}>
                       <span>{p.name}</span>
@@ -850,7 +854,7 @@ function TravelAA() {
                   {transfers.map((t, i) => (
                     <div className="transfer" key={i}>
                       <span>{personNameOf(t.from)} → {personNameOf(t.to)}</span>
-                      <b>{'CNY ' + (t.amount * settlementRateValue).toFixed(2)}</b>
+                      <b>{'CNY ' + t.amount.toFixed(2)}</b>
                     </div>
                   ))}
                 </div>
