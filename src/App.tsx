@@ -672,7 +672,7 @@ function TravelAA() {
                 </span>
               </>
             ) : (
-              <span className="fxTime success">USD 无需获取汇率</span>
+              <span className="fxTime success">{currency === 'CNY' ? 'CNY 直接记账，不换算' : 'USD 无需获取汇率'}</span>
             )}
           </div>
           {currency !== 'USD' && usdAmount !== null && (
