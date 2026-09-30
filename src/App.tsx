@@ -417,7 +417,7 @@ function TravelAA() {
     if (
       bills.some(b => b.payerId === person.id || b.shareIds.includes(person.id))
     ) {
-      setModalMessage('这个人员已经出现在历史账单中，为保护历史数据不能删除。请使用“个人清算重置”处理。');
+      setModalMessage('这个人员已经出现在历史账单中，为保护历史数据不能删除。请使用“结清账款”处理。');
       setRateModal(true);
       return;
     }
@@ -637,7 +637,7 @@ function TravelAA() {
       setError('');
     } catch (e) {
       const message = e instanceof Error ? e.message : '';
-      setModalMessage(message || '个人清算重置失败，请稍后重试。');
+      setModalMessage(message || '结清账款失败，请稍后重试。');
       setRateModal(true);
     } finally {
       setSaving(false);
@@ -941,13 +941,13 @@ function TravelAA() {
                 <button type="button" onClick={() => void refreshSettlementRate()}>汇率刷新</button>
               </div>
               <div className="personalResetArea">
-                <div className="personalResetTitle">个人清算重置</div>
+                <div className="personalResetTitle">结清账款</div>
                 <div className="personalResetList">
                   {people.map(p => (
                     <div className="personalResetRow" key={p.id}>
                       <span>{p.name}</span>
                       <button type="button" className="personalResetButton" onClick={() => setPersonResetTarget(p)} disabled={saving}>
-                        个人清算重置
+                        结清账款
                       </button>
                     </div>
                   ))}
@@ -1014,7 +1014,7 @@ function TravelAA() {
       {personResetTarget && (
         <div className="modalBackdrop" role="dialog" aria-modal="true">
           <div className="modalCard">
-            <h3>个人清算重置</h3>
+            <h3>结清账款</h3>
             <p>确定要重置“{personResetTarget.name}”的个人结算吗？这表示该人员已经完成当前应付/应收款。不会删除或修改任何历史账单，也不会删除或修改人员姓名，只把已经完成的转账从当前 AA 待结算金额中冲销。</p>
             <div className="modalActions">
               <button className="modalDanger" onClick={() => void resetPersonSettlement()} disabled={saving}>确认已转账，结算归零</button>
