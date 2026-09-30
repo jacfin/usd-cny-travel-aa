@@ -248,8 +248,8 @@ async function handleApi(request, env) {
     const bid=decodeURIComponent(billMatch[1]);
     const b=await request.json().catch(()=>({}));
     if (!b?.date || !b?.title || !(Number(b.amount)>0) || !b?.payerId || !Array.isArray(b.shareIds) || !b.shareIds.length) return fail('invalid bill',400);
-    const usd=Number(b.usdAmount ?? b.amount);
-    if (!(usd>0)) return fail('invalid usdAmount',400);
+    const usd=String(b.currency||'USD').toUpperCase()==='CNY' ? 0 : Number(b.usdAmount ?? b.amount);
+    if (String(b.currency||'USD').toUpperCase()!=='CNY' && !(usd>0)) return fail('invalid usdAmount',400);
     const r=await env.DB.prepare('UPDATE bills SET date=?,title=?,amount=?,payer_id=?,share_ids=?,note=?,currency=?,usd_amount=? WHERE id=?').bind(String(b.date),String(b.title).trim(),Number(b.amount),String(b.payerId),JSON.stringify(b.shareIds.map(String)),String(b.note||''),String(b.currency||'USD'),usd,bid).run();
     return r.meta?.changes ? json({ok:true}) : fail('bill not found',404);
   }
