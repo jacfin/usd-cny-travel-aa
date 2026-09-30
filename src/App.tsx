@@ -812,7 +812,6 @@ function TravelAA() {
               <div className="balances">
                 {people.map(p => {
                   const value = balances[p.id] || 0;
-                  if (settlementResetIds.includes(p.id)) return null;
                   return (
                     <div className="balance" key={p.id}>
                       <span>{p.name}</span>
