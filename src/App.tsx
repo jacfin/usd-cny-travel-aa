@@ -225,7 +225,7 @@ const today = new Date().toISOString().slice(0, 10);
 function TravelAA() {
   const [people, setPeople] = useState<Person[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
-  const [settlementResets, setSettlementResets] = useState<Array<{personId:string; resetAt:string; adjustments:Record<string,number>}>>([]);
+  const [settlementResets, setSettlementResets] = useState<Array<{personId:string; resetAt:string; usdAdjustment:number; cnyAdjustment:number; transfers:Array<{fromId:string; toId:string; fromName:string; toName:string; amount:number}>}>>([]);
   const [settlementRate, setSettlementRate] = useState<number | null>(null);
   const [settlementFeeEnabled, setSettlementFeeEnabled] = useState(() => localStorage.getItem('usd_cny_fee_enabled') === '1');
   const [tab, setTab] = useState<'add' | 'history' | 'settle'>('add');
@@ -335,7 +335,7 @@ function TravelAA() {
       const nextPeople = (p.data.people || []) as Person[];
       setPeople(nextPeople);
       setBills((b.data.bills || []) as Bill[]);
-      setSettlementResets((sr.data.resets || []) as Array<{personId:string; resetAt:string; adjustments:Record<string,number>}>);
+      setSettlementResets((sr.data.resets || []) as Array<{personId:string; resetAt:string; usdAdjustment:number; cnyAdjustment:number; transfers:Array<{fromId:string; toId:string; fromName:string; toName:string; amount:number}>}>);
       if (!initializedPeopleRef.current) {
         setPayerId(nextPeople[0]?.id || '');
         setShareIds(nextPeople.map(x => x.id));
@@ -492,25 +492,6 @@ function TravelAA() {
     setTab('add');
   };
 
-  const resetPersonSettlement = async () => {
-    const person = personResetTarget;
-    if (!person) return;
-    setSaving(true);
-    try {
-      await api.delete('/api/people/' + person.id + '/settlement-reset');
-      await load();
-      setPersonResetTarget(null);
-      resetForm();
-      setError('');
-    } catch (e) {
-      const message = e instanceof Error ? e.message : '';
-      setModalMessage(message || '个人清算重置失败，请稍后重试。');
-      setRateModal(true);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const resetAllBills = async () => {
     setSaving(true);
     try {
@@ -568,9 +549,10 @@ function TravelAA() {
       });
     });
     settlementResets.forEach(reset => {
-      Object.entries(reset.adjustments || {}).forEach(([id, value]) => {
-        if (validIds.has(id)) usd[id] += Number(value || 0);
-      });
+      if (validIds.has(reset.personId)) {
+        usd[reset.personId] += Number(reset.usdAdjustment || 0);
+        cny[reset.personId] += Number(reset.cnyAdjustment || 0);
+      }
     });
     return { usd, cny };
   }, [people, bills, settlementResets]);
@@ -618,6 +600,41 @@ function TravelAA() {
 
   const personNameOf = (id: string) =>
     people.find(p => p.id === id)?.name || '未知人员';
+  const resetPersonSettlement = async () => {
+    const person = personResetTarget;
+    if (!person) return;
+    const signedBalance = settlementBalances[person.id] || 0;
+    const relatedTransfers = transfers
+      .filter(t => t.from === person.id || t.to === person.id)
+      .map(t => ({
+        fromId: t.from,
+        toId: t.to,
+        fromName: personNameOf(t.from),
+        toName: personNameOf(t.to),
+        amount: Number(t.amount.toFixed(2)),
+      }));
+    setSaving(true);
+    try {
+      await api.delete('/api/people/' + encodeURIComponent(person.id) + '/settlement-reset', {
+        data: {
+          usdAdjustment: -(balances.usd[person.id] || 0),
+          cnyAdjustment: -(balances.cny[person.id] || 0),
+          transfers: relatedTransfers,
+        },
+      });
+      await load();
+      setPersonResetTarget(null);
+      resetForm();
+      setError('');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '';
+      setModalMessage(message || '个人清算重置失败，请稍后重试。');
+      setRateModal(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const refreshSettlementRate = async () => {
     try {
       const response = await api.get('/api/rates/usd-cny?force=1');
@@ -939,7 +956,36 @@ function TravelAA() {
                     </div>
                   ))}
                 </div>
-                <div className="personalResetHint">点击后表示这个人当前显示的应付/应收已经实际完成转账；历史账单、分摊记录、人员姓名全部保留，结算金额按已完成转账冲销。</div>
+                <div className="personalResetHint">点击后表示这个人当前显示的应付/应收已经实际完成转账；历史账单、分摊记录、人员姓名全部保留，并留下本次实际转账记录。</div>
+              </div>
+              <div className="personalResetArea">
+                <div className="personalResetTitle">已记录的转账</div>
+                {settlementResets.length ? (
+                  <div className="transfers">
+                    {settlementResets.slice().reverse().map((reset, i) => (
+                      <div className="transfer" key={reset.resetAt + '-' + reset.personId + '-' + i}>
+                        <div>
+                          <b>{personNameOf(reset.personId)}</b>
+                          <small style={{display:'block', marginTop:'4px'}}>
+                            {new Date(reset.resetAt).toLocaleString('zh-CN', {hour12:false})}
+                          </small>
+                          {reset.transfers?.length ? reset.transfers.map((t, j) => (
+                            <div key={j} style={{marginTop:'6px'}}>
+                              {t.fromName} → {t.toName}
+                            </div>
+                          )) : <div style={{marginTop:'6px'}}>本次重置时已无待转账</div>}
+                        </div>
+                        <b>
+                          {reset.transfers?.length
+                            ? reset.transfers.map(t => '¥' + Number(t.amount).toFixed(2)).join('、')
+                            : '已结清'}
+                        </b>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty">还没有记录转账。</div>
+                )}
               </div>
               <div className="settlementRateHint">本次结算 USD/CNY：{settlementRateValue > 0 ? settlementRateValue.toFixed(4) : '获取中…'}</div>
               <div className="resetArea">
