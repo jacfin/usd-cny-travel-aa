@@ -82,7 +82,7 @@ async function ecbRate(currency) {
   const usdPerEur=Number(u?.[1]);
   if (!(usdPerEur>0)) throw new Error('ECB USD reference unavailable');
   if (currency==='EUR') return usdPerEur;
-  const m=xml.match(new RegExp(`<Cube\\\\s+currency=['"]${currency}['"]\\\\s+rate=['"]([0-9]+(?:\\\\.[0-9]+)?)['"]\\\\s*\\/>`, 'i'));
+  const m=xml.match(new RegExp("<Cube\\\\s+currency=['\"]"+currency+"['\"]\\\\s+rate=['\"]([0-9]+(?:\\\\.[0-9]+)?)['\"]\\\\s*\\\\/>", 'i'));
   const units=Number(m?.[1]);
   if (!(units>0)) throw new Error('ECB currency reference unavailable');
   return usdPerEur/units;
