@@ -274,8 +274,12 @@ async function handleApi(request, env) {
     return r.meta?.changes ? json({ok:true}) : fail('bill not found',404);
   }
   if (method==='DELETE' && path==='/api/bills') {
-    const r=await env.DB.prepare('DELETE FROM bills').run();
-    return json({ok:true,deleted:r.meta?.changes||0});
+    const r=await env.DB.batch([
+      env.DB.prepare('DELETE FROM bills'),
+      env.DB.prepare('DELETE FROM settlement_reset_records'),
+      env.DB.prepare('DELETE FROM settlement_resets'),
+    ]);
+    return json({ok:true,deleted:r[0]?.meta?.changes||0});
   }
   if (billMatch && method==='DELETE') {
     const bid=decodeURIComponent(billMatch[1]);
