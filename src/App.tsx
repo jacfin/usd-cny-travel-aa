@@ -555,7 +555,7 @@ function TravelAA() {
   },[settlementBalances]);
   const personNameOf = (id: string) =>
     people.find(p => p.id === id)?.name || '未知人员';
-  const total = bills.reduce((sum, b) => sum + (b.usdAmount ?? b.amount), 0);
+  const totalCny = bills.reduce((sum,b)=>sum+(b.currency==='CNY'?b.amount:0),0); const totalUsd = bills.reduce((sum,b)=>sum+(b.currency==='CNY'?0:(b.usdAmount??b.amount)),0);
 
   return (
     <main className="wrap">
@@ -768,12 +768,12 @@ function TravelAA() {
         <section className="card">
           <h2>AA 最终结算</h2>
           <p className="hint">
-            每笔账单只在录入时换算一次 USD；历史账单使用已保存的 USD 金额，不会随汇率变化。
+            CNY 从头到尾按人民币计算；其他币种只在录入时固定换算成 USD。进入本页时，才用“汇率计算器”的当前 USD/CNY 汇率统一换算 USD，最终显示人民币。
           </p>
           <div className="summary">
             <div>
-              <span>累计账单（USD）</span>
-              <b>{'USD ' + total.toFixed(2)}</b>
+              <span>累计账单</span>
+              <b>{'¥ ' + (totalCny + totalUsd * settlementRateValue).toFixed(2)}</b>
             </div>
             <div>
               <span>账单数量</span>
@@ -787,7 +787,7 @@ function TravelAA() {
               <h3>每个人最终净额</h3>
               <div className="balances">
                 {people.map(p => {
-                  const value = balances[p.id] || 0;
+                  const value = (balances.usd[p.id] || 0) * settlementRateValue + (balances.cny[p.id] || 0);
                   return (
                     <div className="balance" key={p.id}>
                       <span>{p.name}</span>
