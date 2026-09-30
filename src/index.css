@@ -685,3 +685,73 @@ input[type='date'] {
   .aa-source b, .aa-result strong { margin-left: 10px; }
   .aa-result { margin-top: 12px; }
 }
+
+/* Compact layout: reduce vertical whitespace while preserving touch targets and preventing overlap */
+.wrap { padding-top: 10px; padding-bottom: 28px; }
+.hero { padding: 16px; border-radius: 14px 14px 8px 8px; gap: 10px; }
+.hero h1 { margin: 4px 0; font-size: 25px; }
+.tabs { gap: 5px; margin: 8px 0; }
+.tabs button { padding: 9px 8px; }
+.card { padding: 15px; border-radius: 13px; }
+.wrap > .card { margin-bottom: 7px; }
+h2 { margin-bottom: 12px; font-size: 21px; }
+h3 { margin: 16px 0 8px; font-size: 16px; }
+.grid2 { gap: 8px; }
+label { margin: 8px 0; }
+input, select { margin-top: 4px; padding: 10px 11px; border-radius: 9px; }
+.amountField, .currencyField { margin-top: 8px; }
+.amountField input, .currencyField select { height: 46px; min-height: 46px; margin-top: 4px; padding-top: 9px; padding-bottom: 9px; }
+.fxControls { margin: 6px 0 0; gap: 7px; }
+.fetchRateButton { min-height: 34px; padding: 6px 12px; }
+.sectionTitle { margin: 11px 0 6px; }
+.chips { gap: 6px; }
+.choice { padding: 8px 12px; }
+.addBillBelowPayer { margin-top: 8px; }
+.addBillBelowPayer .addBillButton { min-height: 42px; }
+.formDivider { margin: 16px 0 4px; }
+.personManageList { gap: 6px; }
+.personNameBox { padding: 9px 11px; }
+.personManageButton { min-height: 38px; padding: 7px 10px; }
+.addPerson { margin-top: 7px; }
+.billList { gap: 7px; }
+.bill { padding: 12px; }
+.billHead b { font-size: 16px; }
+.billHead strong { font-size: 17px; }
+.billHead small, .billMeta { font-size: 12px; line-height: 1.45; }
+.billActions { margin-top: 7px; }
+.empty { padding: 24px 10px; }
+.summary { gap: 7px; margin: 10px 0; }
+.summary div { padding: 10px; }
+.summary b { font-size: 20px; }
+.balances { gap: 6px; }
+.balance { padding: 10px; }
+.transfer { padding: 11px; }
+.transfer b { font-size: 20px; }
+.buttons { gap: 7px; margin-top: 9px; }
+.buttons button { min-height: 42px; padding: 8px 10px; }
+.personalResetArea { margin-top: 13px; padding-top: 10px; }
+.resetArea { margin-top: 18px; padding-top: 13px; }
+.resetButton { min-height: 42px; }
+.mainTabs { margin-bottom: 9px; padding: 7px 10px; }
+.mainTabs button { min-height: 42px; }
+.rate { margin-top: 9px; font-size: 32px; }
+.stats { gap: 7px; margin-top: 10px; }
+.stats > div, .aa-source, .aa-result { padding: 10px; border-radius: 10px; }
+.formula { margin-top: 9px; padding: 10px; line-height: 1.5; }
+.people-buttons { gap: 5px; margin-top: 6px; }
+.people-buttons button { min-height: 40px; }
+.aa-label { margin-top: 8px; }
+.aa-result { margin-top: 9px; }
+footer { margin-top: 8px; }
+@media (max-width: 520px) {
+  .wrap { padding: 8px 10px 24px; }
+  .card { padding: 13px; }
+  .hero { padding: 14px; }
+  .hero h1 { font-size: 22px; }
+  .sync { margin-top: 7px; }
+  .grid2 { gap: 5px; }
+  .currencyAmountGrid { gap: 6px; }
+  .amountField input, .currencyField select { height: 44px; min-height: 44px; }
+  .converter input, .converter select { padding: 11px; font-size: 18px; }
+  .buttons button { min-height: 40px; }
+}
