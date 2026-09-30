@@ -1060,12 +1060,12 @@ function TravelAA() {
 
 
 function App() {
-  const [page, setPage] = useState<'rate' | 'aa'>('rate');
+  const [page, setPage] = useState<'rate' | 'aa'>('aa');
   return (
     <main className="appShell">
       <nav className="mainTabs">
-        <button className={page === 'rate' ? 'active' : ''} onClick={() => setPage('rate')}>汇率计算器</button>
         <button className={page === 'aa' ? 'active' : ''} onClick={() => setPage('aa')}>记账</button>
+        <button className={page === 'rate' ? 'active' : ''} onClick={() => setPage('rate')}>汇率计算器</button>
       </nav>
       {page === 'rate' ? <ConverterPage /> : <TravelAA />}
     </main>
