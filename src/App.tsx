@@ -277,18 +277,15 @@ function TravelAA() {
       setUsdAmount(v > 0 ? v : null);
       return;
     }
+    if (nextCurrency === 'CNY') {
+      setFxRate(null);
+      setFxFetchedAt(null);
+      setUsdAmount(null);
+      return;
+    }
     setFxLoading(true);
     try {
-      if (nextCurrency === 'CNY') {
-        const response = await api.get('/api/rates/usd-cny?force=1');
-        const data = response.data as { rate: number };
-        if (!(data.rate > 0)) throw new Error('invalid rate');
-        const cnyToUsd = 1 / data.rate;
-        setFxRate(cnyToUsd);
-        setFxFetchedAt(new Date().toLocaleString('zh-CN', { hour12: false }));
-        const v = Number(amount);
-        setUsdAmount(v > 0 ? v * cnyToUsd : null);
-      } else {
+      {
         const response = await api.get('/api/rates/mastercard?currency=' + encodeURIComponent(nextCurrency));
         const data = response.data as { rate: number };
         if (!(data.rate > 0)) throw new Error('invalid rate');
@@ -433,7 +430,7 @@ function TravelAA() {
     const numericAmount = Number(amount);
     if (!title.trim()) { setModalMessage('请填写账单名称。'); setRateModal(true); return; }
     if (!(numericAmount > 0)) { setModalMessage('请输入有效金额。'); setRateModal(true); return; }
-    if (currency !== 'USD' && !(fxRate && usdAmount)) {
+    if (currency !== 'USD' && currency !== 'CNY' && !(fxRate && usdAmount)) {
       setModalMessage('请先获取汇率，再添加账单。');
       setRateModal(true);
       return;
@@ -666,7 +663,7 @@ function TravelAA() {
                 const value = e.target.value;
                 setAmount(value);
                 const v = Number(value);
-                setUsdAmount(currency === 'USD' ? (v > 0 ? v : null) : (fxRate && v > 0 ? v * fxRate : null));
+                setUsdAmount(currency === 'USD' ? (v > 0 ? v : null) : currency === 'CNY' ? null : (fxRate && v > 0 ? v * fxRate : null));
               }} placeholder="0.00" />
             </label>
             <label className="currencyField">
