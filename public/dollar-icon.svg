@@ -1,1 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#49634d"/><circle cx="256" cy="256" r="172" fill="#f4f0dc"/><path d="M256 118v276M315 176c-16-22-43-34-72-34-40 0-70 22-70 55 0 38 34 50 77 62 43 12 76 25 76 67 0 38-34 64-80 64-35 0-67-14-87-39" fill="none" stroke="#49634d" stroke-width="28" stroke-linecap="round"/><text x="256" y="465" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="700" fill="#f4f0dc">USD</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#0757C9"/>
+    <stop offset="0.55" stop-color="#0878D9"/>
+    <stop offset="1" stop-color="#20D8C8"/>
+  </linearGradient>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFF7A8"/>
+    <stop offset="0.45" stop-color="#FFD84A"/>
+    <stop offset="1" stop-color="#F4A51C"/>
+  </linearGradient>
+  <linearGradient id="arrow" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8FBFF"/>
+    <stop offset="1" stop-color="#76F4EA"/>
+  </linearGradient>
+  <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+    <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#002B6B" flood-opacity=".35"/>
+  </filter>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<circle cx="256" cy="256" r="174" fill="#0B55B8" fill-opacity=".22" stroke="#B8F6FF" stroke-opacity=".28" stroke-width="3"/>
+<g fill="none" stroke="#B8F6FF" stroke-opacity=".28" stroke-width="3">
+  <ellipse cx="256" cy="256" rx="174" ry="72"/>
+  <ellipse cx="256" cy="256" rx="82" ry="174"/>
+  <path d="M82 256h348"/>
+</g>
+<g filter="url(#shadow)">
+  <path d="M128 212c10-70 70-122 141-122 42 0 81 16 108 44l-34 31c-20-20-46-31-74-31-48 0-89 32-101 76z" fill="url(#arrow)"/>
+  <path d="M121 187l9 53 48-25z" fill="#E8FBFF"/>
+  <path d="M384 300c-10 70-70 122-141 122-42 0-81-16-108-44l34-31c20 20 46 31 74 31 48 0 89-32 101-76z" fill="url(#arrow)"/>
+  <path d="M391 325l-9-53-48 25z" fill="#76F4EA"/>
+</g>
+<g filter="url(#shadow)">
+  <text x="256" y="344" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="260" font-weight="900" fill="url(#gold)" stroke="#E89A19" stroke-width="5" paint-order="stroke">$</text>
+</g>
+<path d="M193 399h126" stroke="#FFF5A5" stroke-width="8" stroke-linecap="round" opacity=".75"/>
+</svg>
