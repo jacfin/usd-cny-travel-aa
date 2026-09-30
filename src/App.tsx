@@ -630,7 +630,7 @@ function TravelAA() {
               <input
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                placeholder="例如：晚餐"
+                placeholder=""
               />
             </label>
           </div>
