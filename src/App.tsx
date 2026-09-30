@@ -536,20 +536,27 @@ function TravelAA() {
   };
 
   const balances = useMemo(() => {
+    const validIds = new Set(people.map(p => p.id));
     const result: Record<string, number> = {};
     people.forEach(p => {
       result[p.id] = 0;
     });
     bills.forEach(b => {
+      // Ignore stale person IDs from old/deleted data so they can never
+      // create an “未知人员” settlement entry.
+      if (!validIds.has(b.payerId)) return;
+      const validShareIds = b.shareIds.filter(id => validIds.has(id));
+      if (!validShareIds.length) return;
       const billUsd = b.usdAmount ?? b.amount;
-      const each = billUsd / b.shareIds.length;
+      const each = billUsd / validShareIds.length;
       result[b.payerId] = (result[b.payerId] || 0) + billUsd;
-      b.shareIds.forEach(id => {
+      validShareIds.forEach(id => {
         result[id] = (result[id] || 0) - each;
       });
     });
     settlementResets.forEach(reset => {
       Object.entries(reset.adjustments || {}).forEach(([id, value]) => {
+        if (!validIds.has(id)) return;
         result[id] = (result[id] || 0) + Number(value || 0);
       });
     });
