@@ -241,6 +241,9 @@ async function handleApi(request, env) {
     if (!(usd>0)) return fail('invalid usdAmount',400);
     const bill={id:id(),date:String(b.date),title:String(b.title).trim(),amount:Number(b.amount),payerId:String(b.payerId),shareIds:b.shareIds.map(String),note:String(b.note||''),currency:String(b.currency||'USD'),usdAmount:usd};
     await env.DB.prepare('INSERT INTO bills(id,date,title,amount,payer_id,share_ids,note,currency,usd_amount) VALUES(?,?,?,?,?,?,?,?,?)').bind(bill.id,bill.date,bill.title,bill.amount,bill.payerId,JSON.stringify(bill.shareIds),bill.note,bill.currency,bill.usdAmount).run();
+    for (const pid of new Set([bill.payerId,...bill.shareIds])) {
+      await env.DB.prepare('DELETE FROM settlement_resets WHERE person_id=?').bind(pid).run();
+    }
     return json({id:bill.id},201);
   }
   const billMatch=path.match(/^\/api\/bills\/([^/]+)$/);
@@ -251,6 +254,11 @@ async function handleApi(request, env) {
     const usd=Number(b.usdAmount ?? b.amount);
     if (!(usd>0)) return fail('invalid usdAmount',400);
     const r=await env.DB.prepare('UPDATE bills SET date=?,title=?,amount=?,payer_id=?,share_ids=?,note=?,currency=?,usd_amount=? WHERE id=?').bind(String(b.date),String(b.title).trim(),Number(b.amount),String(b.payerId),JSON.stringify(b.shareIds.map(String)),String(b.note||''),String(b.currency||'USD'),usd,bid).run();
+    if (r.meta?.changes) {
+      for (const pid of new Set([String(b.payerId),...b.shareIds.map(String)])) {
+        await env.DB.prepare('DELETE FROM settlement_resets WHERE person_id=?').bind(pid).run();
+      }
+    }
     return r.meta?.changes ? json({ok:true}) : fail('bill not found',404);
   }
   if (method==='DELETE' && path==='/api/bills') {
