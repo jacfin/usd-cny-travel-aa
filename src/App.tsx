@@ -889,7 +889,7 @@ function TravelAA() {
                       <span>
                         {personNameOf(t.from)} → {personNameOf(t.to)}
                       </span>
-                      <b>{'USD ' + t.amount.toFixed(2)}</b>
+                      <b>{'¥' + t.amount.toFixed(2)}</b>
                     </div>
                   ))}
                 </div>
