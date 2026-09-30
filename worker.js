@@ -11,6 +11,7 @@ const REPUBLISHED_URLS = [
 const MASTERCARD_URL = 'https://www.mastercard.us/settlement/currencyrate/conversion-rate';
 const ECB_DAILY_URL = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
 const BROAD_FX_URL = 'https://open.er-api.com/v6/latest/USD';
+const LEGACY_APP_URL = 'https://usd-cny-iar15j.v2.appdeploy.ai';
 
 let dbReady = false;
 let usdCache = null;
@@ -29,8 +30,46 @@ async function initDb(env) {
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS people_name_nocase ON people(name COLLATE NOCASE)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS bills (id TEXT PRIMARY KEY, date TEXT NOT NULL, title TEXT NOT NULL, amount REAL NOT NULL, payer_id TEXT NOT NULL, share_ids TEXT NOT NULL, note TEXT NOT NULL DEFAULT \'\', currency TEXT NOT NULL DEFAULT \'USD\', usd_amount REAL NOT NULL)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS bills_date_idx ON bills(date)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)'),
   ]);
+  await migrateLegacyData(env);
   dbReady = true;
+}
+
+async function migrateLegacyData(env) {
+  const marker=await env.DB.prepare("SELECT value FROM app_meta WHERE key='legacy_migration'").first();
+  if (marker) return;
+  const counts=await env.DB.prepare('SELECT (SELECT COUNT(*) FROM people) AS people_count, (SELECT COUNT(*) FROM bills) AS bill_count').first();
+  if (Number(counts?.people_count||0)>0 || Number(counts?.bill_count||0)>0) {
+    await env.DB.prepare("INSERT OR REPLACE INTO app_meta(key,value) VALUES('legacy_migration','skipped_existing_data')").run();
+    return;
+  }
+  try {
+    const [peopleRes,billsRes]=await Promise.all([
+      fetch(LEGACY_APP_URL+'/api/people',{headers:{accept:'application/json'}}),
+      fetch(LEGACY_APP_URL+'/api/bills',{headers:{accept:'application/json'}})
+    ]);
+    if (!peopleRes.ok || !billsRes.ok) throw new Error('legacy API unavailable');
+    const peopleData=await peopleRes.json();
+    const billsData=await billsRes.json();
+    const people=Array.isArray(peopleData?.people)?peopleData.people:[];
+    const bills=Array.isArray(billsData?.bills)?billsData.bills:[];
+    const statements=[];
+    for (const p of people) {
+      if (!p?.id || !p?.name) continue;
+      statements.push(env.DB.prepare('INSERT OR IGNORE INTO people(id,name,created_at) VALUES(?,?,?)').bind(String(p.id),String(p.name),new Date().toISOString()));
+    }
+    for (const b of bills) {
+      if (!b?.id || !b?.date || !b?.title || !(Number(b.amount)>0) || !b?.payerId || !Array.isArray(b.shareIds) || !b.shareIds.length) continue;
+      statements.push(env.DB.prepare('INSERT OR IGNORE INTO bills(id,date,title,amount,payer_id,share_ids,note,currency,usd_amount) VALUES(?,?,?,?,?,?,?,?,?)').bind(
+        String(b.id),String(b.date),String(b.title),Number(b.amount),String(b.payerId),JSON.stringify(b.shareIds.map(String)),String(b.note||''),String(b.currency||'USD'),Number(b.usdAmount ?? b.amount)
+      ));
+    }
+    for (let i=0;i<statements.length;i+=50) await env.DB.batch(statements.slice(i,i+50));
+    await env.DB.prepare("INSERT OR REPLACE INTO app_meta(key,value) VALUES('legacy_migration',?)").bind(JSON.stringify({status:'completed',people:people.length,bills:bills.length,at:new Date().toISOString()})).run();
+  } catch (e) {
+    console.warn('Legacy AppDeploy migration pending:', e?.message||e);
+  }
 }
 
 async function fetchText(url) {
