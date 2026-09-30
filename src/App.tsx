@@ -227,7 +227,6 @@ function TravelAA() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [settlementResets, setSettlementResets] = useState<Array<{personId:string; resetAt:string; usdAdjustment:number; cnyAdjustment:number; transfers:Array<{fromId:string; toId:string; fromName:string; toName:string; amount:number}>}>>([]);
   const [settlementRate, setSettlementRate] = useState<number | null>(null);
-  const [settlementFeeEnabled, setSettlementFeeEnabled] = useState(() => localStorage.getItem('usd_cny_fee_enabled') === '1');
   const [tab, setTab] = useState<'add' | 'history' | 'settle'>('add');
   const [personName, setPersonName] = useState('');
   const [date, setDate] = useState(today);
@@ -558,17 +557,16 @@ function TravelAA() {
   }, [people, bills, settlementResets]);
 
   const settlementRateValue = settlementRate || 0;
-  const settlementFeeMultiplier = settlementFeeEnabled ? 1 + FIXED_FEE / 100 : 1;
   const settlementBalances = useMemo(() => {
     const out: Record<string, number> = {};
     people.forEach(p => {
       const baseCny =
         (balances.usd[p.id] || 0) * settlementRateValue +
         (balances.cny[p.id] || 0);
-      out[p.id] = baseCny * settlementFeeMultiplier;
+      out[p.id] = baseCny;
     });
     return out;
-  }, [people, balances, settlementRateValue, settlementFeeMultiplier]);
+  }, [people, balances, settlementRateValue]);
 
   // 账单余额始终只由历史账单计算；个人清算只改变“待转账”的显示状态。
   const displaySettlementBalances = useMemo(() => {
@@ -659,7 +657,6 @@ function TravelAA() {
   };
   useEffect(() => {
     if (tab === 'settle') {
-      setSettlementFeeEnabled(localStorage.getItem('usd_cny_fee_enabled') === '1');
       void refreshSettlementRate();
     }
   }, [tab]);
@@ -942,18 +939,6 @@ function TravelAA() {
               )}
               <div className="buttons">
                 <button type="button" onClick={() => void refreshSettlementRate()}>汇率刷新</button>
-                <button
-                  type="button"
-                  className={settlementFeeEnabled ? 'active' : ''}
-                  onClick={() => {
-                    const next = !settlementFeeEnabled;
-                    setSettlementFeeEnabled(next);
-                    localStorage.setItem('usd_cny_fee_enabled', next ? '1' : '0');
-                  }}
-                >
-                  <span>提现手续费 +0.1%：</span>
-                  <span>{settlementFeeEnabled ? '已启用' : '未启用'}</span>
-                </button>
               </div>
               <div className="personalResetArea">
                 <div className="personalResetTitle">个人清算重置</div>
