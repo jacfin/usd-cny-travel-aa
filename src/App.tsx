@@ -597,7 +597,6 @@ function TravelAA() {
   const totalCny = totalUsd * settlementRateValue;
   const personNameOf = (id: string) =>
     people.find(p => p.id === id)?.name || '未知人员';
-  const total = totalUsd;
 
   return (
     <main className="wrap">
