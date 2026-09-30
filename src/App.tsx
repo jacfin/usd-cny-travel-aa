@@ -253,6 +253,7 @@ function TravelAA() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
   const initializedPeopleRef = useRef(false);
   const choicePointerStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -533,6 +534,7 @@ function TravelAA() {
 
   const [settlementRate, setSettlementRate] = useState<number | null>(null);
   const [settlementRateUpdatedAt, setSettlementRateUpdatedAt] = useState('');
+  const settlementRateValue = settlementRate || rate || 0;
   const balances = useMemo(() => {
     const validIds = new Set(people.map(p => p.id));
     const usd: Record<string, number> = {};
@@ -556,7 +558,6 @@ function TravelAA() {
     return { usd, cny };
   }, [people, bills, settlementResets]);
 
-  const settlementRateValue = settlementRate || rate || 0;
   const settlementBalances = useMemo(() => {
     const out: Record<string, number> = {};
     people.forEach(p => { out[p.id] = (balances.usd[p.id] || 0) * settlementRateValue + (balances.cny[p.id] || 0); });
