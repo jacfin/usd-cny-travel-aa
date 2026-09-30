@@ -226,6 +226,7 @@ function TravelAA() {
   const [people, setPeople] = useState<Person[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [settlementResets, setSettlementResets] = useState<Array<{personId:string; resetAt:string; adjustments:Record<string,number>}>>([]);
+  const [settlementRate, setSettlementRate] = useState<number | null>(null);
   const [tab, setTab] = useState<'add' | 'history' | 'settle'>('add');
   const [personName, setPersonName] = useState('');
   const [date, setDate] = useState(today);
@@ -277,26 +278,21 @@ function TravelAA() {
       setUsdAmount(v > 0 ? v : null);
       return;
     }
+    if (nextCurrency === 'CNY') {
+      setFxRate(null);
+      setUsdAmount(null);
+      setFxFetchedAt(null);
+      return;
+    }
     setFxLoading(true);
     try {
-      if (nextCurrency === 'CNY') {
-        const response = await api.get('/api/rates/usd-cny');
-        const data = response.data as { rate: number };
-        if (!(data.rate > 0)) throw new Error('invalid rate');
-        const cnyToUsd = 1 / data.rate;
-        setFxRate(cnyToUsd);
-        setFxFetchedAt(new Date().toLocaleString('zh-CN', { hour12: false }));
-        const v = Number(amount);
-        setUsdAmount(v > 0 ? v * cnyToUsd : null);
-      } else {
-        const response = await api.get('/api/rates/mastercard?currency=' + encodeURIComponent(nextCurrency));
-        const data = response.data as { rate: number };
-        if (!(data.rate > 0)) throw new Error('invalid rate');
-        setFxRate(data.rate);
-        setFxFetchedAt(new Date().toLocaleString('zh-CN', { hour12: false }));
-        const v = Number(amount);
-        setUsdAmount(v > 0 ? v * data.rate : null);
-      }
+      const response = await api.get('/api/rates/mastercard?currency=' + encodeURIComponent(nextCurrency));
+      const data = response.data as { rate: number };
+      if (!(data.rate > 0)) throw new Error('invalid rate');
+      setFxRate(data.rate);
+      setFxFetchedAt(new Date().toLocaleString('zh-CN', { hour12: false }));
+      const v = Number(amount);
+      setUsdAmount(v > 0 ? v * data.rate : null);
       setError('');
     } catch {
       setFxRate(null);
@@ -434,7 +430,7 @@ function TravelAA() {
     const numericAmount = Number(amount);
     if (!title.trim()) { setModalMessage('请填写账单名称。'); setRateModal(true); return; }
     if (!(numericAmount > 0)) { setModalMessage('请输入有效金额。'); setRateModal(true); return; }
-    if (currency !== 'USD' && !(fxRate && usdAmount)) {
+    if (currency !== 'USD' && currency !== 'CNY' && !(fxRate && usdAmount)) {
       setModalMessage('请先获取汇率，再添加账单。');
       setRateModal(true);
       return;
@@ -448,7 +444,7 @@ function TravelAA() {
       title: title.trim(),
       amount: numericAmount,
       currency,
-      usdAmount: currency === 'USD' ? numericAmount : usdAmount,
+      usdAmount: currency === 'USD' ? numericAmount : currency === 'CNY' ? 0 : usdAmount,
       payerId,
       shareIds,
       note: note.trim(),
@@ -473,8 +469,14 @@ function TravelAA() {
     setTitle(bill.title);
     setAmount(String(bill.amount));
     setCurrency(bill.currency || 'USD');
-    setFxRate(1);
-    setUsdAmount(bill.usdAmount ?? bill.amount);
+    setFxRate(bill.currency === 'USD' ? 1 : null);
+    setUsdAmount(
+      bill.currency === 'USD'
+        ? (bill.usdAmount ?? bill.amount)
+        : bill.currency === 'CNY'
+          ? null
+          : (bill.usdAmount ?? bill.amount)
+    );
     setPayerId(bill.payerId);
     setShareIds(bill.shareIds);
     setNote(bill.note || '');
@@ -537,38 +539,48 @@ function TravelAA() {
 
   const balances = useMemo(() => {
     const validIds = new Set(people.map(p => p.id));
-    const result: Record<string, number> = {};
+    const usd: Record<string, number> = {};
+    const cny: Record<string, number> = {};
     people.forEach(p => {
-      result[p.id] = 0;
+      usd[p.id] = 0;
+      cny[p.id] = 0;
     });
     bills.forEach(b => {
-      // Ignore stale person IDs from old/deleted data so they can never
-      // create an “未知人员” settlement entry.
       if (!validIds.has(b.payerId)) return;
-      const validShareIds = b.shareIds.filter(id => validIds.has(id));
-      if (!validShareIds.length) return;
-      const billUsd = b.usdAmount ?? b.amount;
-      const each = billUsd / validShareIds.length;
-      result[b.payerId] = (result[b.payerId] || 0) + billUsd;
-      validShareIds.forEach(id => {
-        result[id] = (result[id] || 0) - each;
+      const ids = b.shareIds.filter(id => validIds.has(id));
+      if (!ids.length) return;
+      const isCny = b.currency === 'CNY';
+      const value = Number(isCny ? b.amount : (b.usdAmount ?? b.amount));
+      const target = isCny ? cny : usd;
+      const each = value / ids.length;
+      target[b.payerId] += value;
+      ids.forEach(id => {
+        target[id] -= each;
       });
     });
     settlementResets.forEach(reset => {
       Object.entries(reset.adjustments || {}).forEach(([id, value]) => {
-        if (!validIds.has(id)) return;
-        result[id] = (result[id] || 0) + Number(value || 0);
+        if (validIds.has(id)) usd[id] += Number(value || 0);
       });
     });
-    return result;
+    return { usd, cny };
   }, [people, bills, settlementResets]);
 
+  const settlementRateValue = settlementRate || 0;
+  const settlementBalances = useMemo(() => {
+    const out: Record<string, number> = {};
+    people.forEach(p => {
+      out[p.id] = (balances.usd[p.id] || 0) * settlementRateValue + (balances.cny[p.id] || 0);
+    });
+    return out;
+  }, [people, balances, settlementRateValue]);
+
   const transfers = useMemo(() => {
-    const debtors = Object.entries(balances)
+    const debtors = Object.entries(settlementBalances)
       .filter(x => x[1] < -0.005)
       .map(x => ({ id: x[0], value: -x[1] }))
       .sort((a, b) => b.value - a.value);
-    const creditors = Object.entries(balances)
+    const creditors = Object.entries(settlementBalances)
       .filter(x => x[1] > 0.005)
       .map(x => ({ id: x[0], value: x[1] }))
       .sort((a, b) => b.value - a.value);
@@ -593,7 +605,22 @@ function TravelAA() {
 
   const personNameOf = (id: string) =>
     people.find(p => p.id === id)?.name || '未知人员';
-  const total = bills.reduce((sum, b) => sum + (b.usdAmount ?? b.amount), 0);
+  const refreshSettlementRate = async () => {
+    try {
+      const response = await api.get('/api/rates/usd-cny?force=1');
+      const data = response.data as RateResponse;
+      if (!(data.rate > 0)) throw new Error('invalid rate');
+      setSettlementRate(data.rate);
+    } catch {
+      const cached = Number(localStorage.getItem('usd_cny_last_rate'));
+      if (cached > 0) setSettlementRate(cached);
+    }
+  };
+  useEffect(() => {
+    if (tab === 'settle') void refreshSettlementRate();
+  }, [tab]);
+  const totalCny = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? b.amount : 0), 0);
+  const totalUsd = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? 0 : (b.usdAmount ?? b.amount)), 0);
 
   return (
     <main className="wrap">
@@ -659,7 +686,13 @@ function TravelAA() {
                 const value = e.target.value;
                 setAmount(value);
                 const v = Number(value);
-                setUsdAmount(currency === 'USD' ? (v > 0 ? v : null) : (fxRate && v > 0 ? v * fxRate : null));
+                setUsdAmount(
+                  currency === 'USD'
+                    ? (v > 0 ? v : null)
+                    : currency === 'CNY'
+                      ? null
+                      : (fxRate && v > 0 ? v * fxRate : null)
+                );
               }} placeholder="0.00" />
             </label>
             <label className="currencyField">
@@ -806,12 +839,12 @@ function TravelAA() {
         <section className="card">
           <h2>AA 最终结算</h2>
           <p className="hint">
-            每笔账单只在录入时换算一次 USD；历史账单使用已保存的 USD 金额，不会随汇率变化。
+            CNY 账单始终按人民币记录；其他币种在录入时固定换算为 USD。进入本页时只刷新一次 USD/CNY，最终统一显示人民币。
           </p>
           <div className="summary">
             <div>
-              <span>累计账单（USD）</span>
-              <b>{'USD ' + total.toFixed(2)}</b>
+              <span>累计账单</span>
+              <b>{'¥' + (totalCny + totalUsd * settlementRateValue).toFixed(2)}</b>
             </div>
             <div>
               <span>账单数量</span>
@@ -825,7 +858,7 @@ function TravelAA() {
               <h3>每个人最终净额</h3>
               <div className="balances">
                 {people.map(p => {
-                  const value = balances[p.id] || 0;
+                  const value = settlementBalances[p.id] || 0;
                   return (
                     <div className="balance" key={p.id}>
                       <span>{p.name}</span>
@@ -835,7 +868,7 @@ function TravelAA() {
                         }
                       >
                         {value > 0.005 ? '+' : ''}
-                        {'USD ' + value.toFixed(2)}{' '}
+                        {'¥' + value.toFixed(2)}{' '}
                         {value > 0.005
                           ? '应收'
                           : value < -0.005
@@ -875,6 +908,7 @@ function TravelAA() {
                 </div>
                 <div className="personalResetHint">点击后表示这个人当前显示的应付/应收已经实际完成转账；历史账单、分摊记录、人员姓名全部保留，结算金额按已完成转账冲销。</div>
               </div>
+              <div className="settlementRateHint">本次结算 USD/CNY：{settlementRateValue > 0 ? settlementRateValue.toFixed(4) : '获取中…'}</div>
               <div className="resetArea">
                 <button className="resetButton" type="button" onClick={() => setResetModal(true)}>结清重置</button>
                 <div className="resetHint">清除全部账单记录，人员不会被删除。</div>
