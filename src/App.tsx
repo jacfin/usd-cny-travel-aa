@@ -225,6 +225,7 @@ const today = new Date().toISOString().slice(0, 10);
 function TravelAA() {
   const [people, setPeople] = useState<Person[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [settlementResetIds, setSettlementResetIds] = useState<string[]>([]);
   const [tab, setTab] = useState<'add' | 'history' | 'settle'>('add');
   const [personName, setPersonName] = useState('');
   const [date, setDate] = useState(today);
@@ -313,11 +314,15 @@ function TravelAA() {
 
   async function load() {
     try {
-      const p = await api.get('/api/people');
-      const b = await api.get('/api/bills');
+      const [p, b, sr] = await Promise.all([
+        api.get('/api/people'),
+        api.get('/api/bills'),
+        api.get('/api/settlement-resets'),
+      ]);
       const nextPeople = (p.data.people || []) as Person[];
       setPeople(nextPeople);
       setBills((b.data.bills || []) as Bill[]);
+      setSettlementResetIds((sr.data.personIds || []) as string[]);
       if (!initializedPeopleRef.current) {
         setPayerId(nextPeople[0]?.id || '');
         setShareIds(nextPeople.map(x => x.id));
@@ -537,11 +542,11 @@ function TravelAA() {
 
   const transfers = useMemo(() => {
     const debtors = Object.entries(balances)
-      .filter(x => x[1] < -0.005)
+      .filter(x => !settlementResetIds.includes(x[0]) && x[1] < -0.005)
       .map(x => ({ id: x[0], value: -x[1] }))
       .sort((a, b) => b.value - a.value);
     const creditors = Object.entries(balances)
-      .filter(x => x[1] > 0.005)
+      .filter(x => !settlementResetIds.includes(x[0]) && x[1] > 0.005)
       .map(x => ({ id: x[0], value: x[1] }))
       .sort((a, b) => b.value - a.value);
     const result: Array<{ from: string; to: string; amount: number }> = [];
@@ -561,7 +566,7 @@ function TravelAA() {
       if (creditors[j].value < 0.005) j++;
     }
     return result;
-  }, [balances]);
+  }, [balances, settlementResetIds]);
 
   const personNameOf = (id: string) =>
     people.find(p => p.id === id)?.name || '未知人员';
@@ -802,6 +807,7 @@ function TravelAA() {
               <div className="balances">
                 {people.map(p => {
                   const value = balances[p.id] || 0;
+                  if (settlementResetIds.includes(p.id)) return null;
                   return (
                     <div className="balance" key={p.id}>
                       <span>{p.name}</span>
@@ -849,7 +855,7 @@ function TravelAA() {
                     </div>
                   ))}
                 </div>
-                <div className="personalResetHint">只移除该人员在 AA 分摊中的份额并删除人员；历史账单保留不删。若该人员是某笔账单付款人，为保护付款记录将拒绝重置。</div>
+                <div className="personalResetHint">只从“AA 结算”里移除该人员的结算记录；历史账单、分摊记录和人员姓名全部保留，不会修改其他人的结算记录。</div>
               </div>
               <div className="resetArea">
                 <button className="resetButton" type="button" onClick={() => setResetModal(true)}>结清重置</button>
@@ -882,9 +888,9 @@ function TravelAA() {
         <div className="modalBackdrop" role="dialog" aria-modal="true">
           <div className="modalCard">
             <h3>个人清算重置</h3>
-            <p>确定要删除“{personResetTarget.name}”吗？不会删除任何历史账单，只会移除该人员在 AA 分摊中的份额并删除这个人。若该人员是历史账单付款人，则不会执行重置。</p>
+            <p>确定要重置“{personResetTarget.name}”的个人结算记录吗？不会删除或修改任何历史账单，也不会删除或修改这个人的姓名；只会把这个人从“AA 结算”中移除，其他人的结算记录保持不变。</p>
             <div className="modalActions">
-              <button className="modalDanger" onClick={() => void resetPersonSettlement()} disabled={saving}>确认删除并重置</button>
+              <button className="modalDanger" onClick={() => void resetPersonSettlement()} disabled={saving}>确认重置结算</button>
               <button className="modalSecondary" onClick={() => setPersonResetTarget(null)} disabled={saving}>取消</button>
             </div>
           </div>
