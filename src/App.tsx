@@ -271,16 +271,16 @@ function TravelAA() {
   const CURRENCIES = [['USD','美元'],['CNY','人民币'],['EUR','欧元'],['GBP','英镑'],['JPY','日元'],['CAD','加元'],['AUD','澳元'],['MXN','墨西哥比索'],['CHF','瑞士法郎'],['THB','泰铢'],['VND','越南盾'],['SGD','新加坡元'],['KRW','韩元'],['HKD','港币'],['TWD','新台币'],['MYR','马来西亚林吉特'],['INR','印度卢比'],['NZD','新西兰元'],['ARS','阿根廷比索'],['BRL','巴西雷亚尔'],['PEN','秘鲁索尔'],['BOB','玻利维亚诺'],['CLP','智利比索']] as const;
 
   const loadMastercardRate = async (nextCurrency: string) => {
-    if (nextCurrency === 'USD' || nextCurrency === 'CNY') {
-      setFxRate(nextCurrency === 'USD' ? 1 : null);
+    if (nextCurrency === 'USD') {
+      setFxRate(1);
       const v = Number(amount);
-      setUsdAmount(nextCurrency === 'USD' && v > 0 ? v : null);
+      setUsdAmount(v > 0 ? v : null);
       return;
     }
     setFxLoading(true);
     try {
       if (nextCurrency === 'CNY') {
-        const response = await api.get('/api/rates/usd-cny');
+        const response = await api.get('/api/rates/usd-cny?force=1');
         const data = response.data as { rate: number };
         if (!(data.rate > 0)) throw new Error('invalid rate');
         const cnyToUsd = 1 / data.rate;
@@ -308,7 +308,6 @@ function TravelAA() {
       setFxLoading(false);
     }
   };
-
   const handleCurrencyChange = (nextCurrency: string) => {
     setCurrency(nextCurrency);
     setFxFetchedAt(null);
@@ -320,7 +319,6 @@ function TravelAA() {
     } catch {
       // Ignore storage failures; the current selection still works.
     }
-    if (nextCurrency === 'CNY') return;
     void loadMastercardRate(nextCurrency);
   };
 
@@ -449,7 +447,7 @@ function TravelAA() {
       title: title.trim(),
       amount: numericAmount,
       currency,
-      usdAmount: currency === 'USD' ? numericAmount : currency === 'CNY' ? 0 : usdAmount,
+      usdAmount: currency === 'USD' ? numericAmount : usdAmount,
       payerId,
       shareIds,
       note: note.trim(),
@@ -474,8 +472,8 @@ function TravelAA() {
     setTitle(bill.title);
     setAmount(String(bill.amount));
     setCurrency(bill.currency || 'USD');
-    setFxRate(bill.currency === 'USD' ? 1 : null);
-    setUsdAmount(bill.currency === 'CNY' ? null : (bill.usdAmount ?? bill.amount));
+    setFxRate(bill.currency === 'USD' ? 1 : bill.currency === 'CNY' ? null : 1);
+    setUsdAmount(bill.usdAmount ?? bill.amount);
     setPayerId(bill.payerId);
     setShareIds(bill.shareIds);
     setNote(bill.note || '');
@@ -665,7 +663,7 @@ function TravelAA() {
                 const value = e.target.value;
                 setAmount(value);
                 const v = Number(value);
-                setUsdAmount(currency === 'USD' ? (v > 0 ? v : null) : currency === 'CNY' ? null : (fxRate && v > 0 ? v * fxRate : null));
+                setUsdAmount(currency === 'USD' ? (v > 0 ? v : null) : (fxRate && v > 0 ? v * fxRate : null));
               }} placeholder="0.00" />
             </label>
             <label className="currencyField">
