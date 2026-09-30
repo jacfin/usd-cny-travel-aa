@@ -718,14 +718,6 @@ function TravelAA() {
               <b>{'USD ' + ((usdAmount ?? Number(amount)) / shareIds.length).toFixed(2)} USD</b>
             </div>
           )}
-          <label>
-            备注（可选）
-            <input
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              placeholder="例如：酒店押金"
-            />
-          </label>
           <div className="formDivider" />
           <div className="peopleBox">
             <div className="sectionTitle">人员管理</div>
