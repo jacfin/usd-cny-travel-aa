@@ -186,7 +186,7 @@ function calculateBalances(people,bills,resets) {
     const currency=String(b.currency||'USD').toUpperCase();
     const amount=Number(b.amount||0);
     const validShares=b.shareIds.filter(id=>usd[id]!==undefined);
-    if (!usd[b.payerId] || !validShares.length) continue;
+    if (usd[b.payerId] === undefined || !validShares.length) continue;
     const each=amount/validShares.length;
     const target=currency==='CNY' ? cny : usd;
     target[b.payerId]=(target[b.payerId]||0)+amount;
