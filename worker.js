@@ -193,7 +193,7 @@ async function handleApi(request, env) {
 
   if (method==='GET' && path==='/api/people') return json({people:await listPeople(env)});
   if (method==='GET' && path==='/api/settlement-resets') {
-    const r=await env.DB.prepare('SELECT id,person_id,reset_at,usd_adjustment,cny_adjustment,transfers_json FROM settlement_reset_records ORDER BY reset_at ASC').all();
+    const r=await env.DB.prepare('SELECT id,person_id,reset_at,usd_adjustment,cny_adjustment,transfers_json FROM settlement_reset_records WHERE transfers_json <> '[]' ORDER BY reset_at ASC').all();
     return json({
       resets:r.results.map(x => ({
         id:String(x.id),
