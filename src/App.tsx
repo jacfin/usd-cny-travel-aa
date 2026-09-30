@@ -570,8 +570,22 @@ function TravelAA() {
     return out;
   }, [people, balances, settlementRateValue, settlementFeeMultiplier]);
 
+  // 账单余额始终只由历史账单计算；个人清算只改变“待转账”的显示状态。
+  const displaySettlementBalances = useMemo(() => {
+    const out = { ...settlementBalances };
+    settlementResets.forEach(reset => {
+      (reset.transfers || []).forEach(t => {
+        const amount = Number(t.amount || 0);
+        if (!(amount > 0)) return;
+        if (out[t.fromId] !== undefined) out[t.fromId] += amount;
+        if (out[t.toId] !== undefined) out[t.toId] -= amount;
+      });
+    });
+    return out;
+  }, [settlementBalances, settlementResets]);
+
   const transfers = useMemo(() => {
-    const debtors = Object.entries(settlementBalances)
+    const debtors = Object.entries(displaySettlementBalances)
       .filter(x => x[1] < -0.005)
       .map(x => ({ id: x[0], value: -x[1] }))
       .sort((a, b) => b.value - a.value);
@@ -603,7 +617,6 @@ function TravelAA() {
   const resetPersonSettlement = async () => {
     const person = personResetTarget;
     if (!person) return;
-    const signedBalance = settlementBalances[person.id] || 0;
     const relatedTransfers = transfers
       .filter(t => t.from === person.id || t.to === person.id)
       .map(t => ({
@@ -1031,7 +1044,8 @@ function TravelAA() {
         <div className="modalBackdrop" role="dialog" aria-modal="true">
           <div className="modalCard">
             <h3>结清重置</h3>
-            <p>确定要清除重置吗？</p>
+            <p><strong>此操作会删除所有历史账单记录。</strong></p>
+            <p>人员名单会保留，但所有已经记录的账单、分摊数据和个人清算记录都会被清除，AA 结算将重新变为空白状态。此操作不可恢复。</p>
             <div className="modalActions">
               <button className="modalDanger" onClick={() => void resetAllBills()} disabled={saving}>重置</button>
               <button className="modalSecondary" onClick={() => setResetModal(false)} disabled={saving}>取消</button>
