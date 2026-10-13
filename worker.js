@@ -36,7 +36,46 @@ async function initDb(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS settlement_reset_records_time_idx ON settlement_reset_records(reset_at)'),
   ]);
   await migrateLegacyData(env);
+  await correctLegacyEchoTransferUsd(env);
   dbReady = true;
+}
+
+async function correctLegacyEchoTransferUsd(env) {
+  // One-time correction requested by the user: the legacy Echo -> J settlement
+  // was agreed as USD 975.00, not a rate-derived USD 975.66. Preserve its
+  // original CNY amount and all other historical data.
+  const marker = await env.DB.prepare("SELECT value FROM app_meta WHERE key='legacy_echo_j_usd_correction_975'").first();
+  if (marker) return;
+  const rows = await env.DB.prepare(
+    "SELECT r.id, r.transfers_json FROM settlement_reset_records r JOIN people p ON p.id=r.person_id WHERE p.name=? COLLATE NOCASE ORDER BY r.reset_at"
+  ).bind('Echo').all();
+  let changed = 0;
+  for (const row of (rows.results || [])) {
+    let transfers;
+    try { transfers = JSON.parse(row.transfers_json || '[]'); } catch { continue; }
+    let rowChanged = false;
+    for (const t of transfers) {
+      const amount = Number(t.amount || 0);
+      const oldUsd = Number(t.amountUsd || 0);
+      if (String(t.fromName || '').trim().toLowerCase() === 'echo'
+        && String(t.toName || '').trim().toLowerCase() === 'j'
+        && Math.abs(amount - 6546.68) < 0.02
+        && Math.abs(oldUsd - 975.66) < 0.03) {
+        t.amountUsd = 975;
+        rowChanged = true;
+        changed++;
+      }
+    }
+    if (rowChanged) {
+      await env.DB.prepare('UPDATE settlement_reset_records SET transfers_json=? WHERE id=?')
+        .bind(JSON.stringify(transfers), row.id).run();
+    }
+  }
+  if (changed > 0) {
+    await env.DB.prepare("INSERT OR REPLACE INTO app_meta(key,value) VALUES('legacy_echo_j_usd_correction_975',?)")
+      .bind(JSON.stringify({ correctedTransfers: changed, at: new Date().toISOString() })).run();
+  }
+}
 }
 
 async function migrateLegacyData(env) {
