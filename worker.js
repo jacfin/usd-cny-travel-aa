@@ -76,7 +76,6 @@ async function correctLegacyEchoTransferUsd(env) {
       .bind(JSON.stringify({ correctedTransfers: changed, at: new Date().toISOString() })).run();
   }
 }
-}
 
 async function migrateLegacyData(env) {
   const marker=await env.DB.prepare("SELECT value FROM app_meta WHERE key='legacy_migration'").first();
