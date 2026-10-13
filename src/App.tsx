@@ -970,7 +970,7 @@ function TravelAA() {
               <div className="buttons">
                 <button type="button" onClick={() => void refreshSettlementRate()}>汇率刷新</button>
               </div>
-              <div className="settlementRateHint" style={{fontSize:'0.85em', marginTop:'-8px', marginBottom:'12px', opacity:0.85}}>
+              <div className="settlementRateHint" style={{fontSize:'0.85em', marginTop:'6px', marginBottom:'12px', opacity:0.85, lineHeight:1.5, overflowWrap:'anywhere'}}>
                 {settlementRateStatus || '汇率更新时间'}{settlementRateUpdatedAt ? ' · ' + new Date(settlementRateUpdatedAt).toLocaleString('zh-CN', {hour12:false}) : ''}
               </div>
               <div className="personalResetArea">
