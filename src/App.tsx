@@ -590,13 +590,6 @@ function TravelAA() {
         if (out[t.toId] !== undefined) out[t.toId] -= amountUsd;
       });
     });
-    // Legacy reset records did not freeze the exchange rate. Ignore sub-$0.10 FX drift left by those historical conversions.
-    const hasLegacyReset = settlementResets.some(reset => Number(reset.usdAdjustment || 0) === 0 && Number(reset.cnyAdjustment || 0) === 0);
-    if (hasLegacyReset) {
-      Object.keys(out).forEach(id => {
-        if (Math.abs(out[id]) < 0.25) out[id] = 0;
-      });
-    }
     return out;
   }, [settlementBalancesUsd, settlementResets, settlementRateValue]);
   const displaySettlementBalances = useMemo(() => {
