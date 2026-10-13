@@ -568,32 +568,12 @@ function TravelAA() {
     return out;
   }, [people, balances, settlementRateValue]);
 
-  // 新版结清使用固定的 USD/CNY 余额调整；不再把历史转账按固定人民币金额重复冲销。
-  // 兼容旧版记录：只有旧记录（USD/CNY 调整均为 0）继续使用历史转账冲销。
-  const displaySettlementBalances = useMemo(() => {
-    const out = { ...settlementBalances };
-    settlementResets.forEach(reset => {
-      if (Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0) return;
-      (reset.transfers || []).forEach(t => {
-        // 新记录保存结清时的 USD 等值，展示时随当前 USD/CNY 汇率换算；
-        // 旧记录没有 amountUsd，继续按旧版固定人民币金额兼容显示。
-        const amount = t.amountUsd !== undefined
-          ? Number(t.amountUsd || 0) * settlementRateValue
-          : Number(t.amount || 0);
-        if (!(amount > 0)) return;
-        if (out[t.fromId] !== undefined) out[t.fromId] += amount;
-        if (out[t.toId] !== undefined) out[t.toId] -= amount;
-      });
-    });
-    return out;
-  }, [settlementBalances, settlementResets]);
-
   const transfers = useMemo(() => {
-    const debtors = Object.entries(displaySettlementBalances)
+    const debtors = Object.entries(settlementBalances)
       .filter(x => x[1] < -0.005)
       .map(x => ({ id: x[0], value: -x[1] }))
       .sort((a, b) => b.value - a.value);
-    const creditors = Object.entries(displaySettlementBalances)
+    const creditors = Object.entries(settlementBalances)
       .filter(x => x[1] > 0.005)
       .map(x => ({ id: x[0], value: x[1] }))
       .sort((a, b) => b.value - a.value);
