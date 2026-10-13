@@ -1006,7 +1006,7 @@ function TravelAA() {
                         </div>
                         <b>
                           {reset.transfers?.length
-                            ? reset.transfers.map(t => '¥' + Number(t.amount).toFixed(2) + ' (' + Number(t.amountUsd ?? (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0)).toFixed(2) + ' USD)').join('、')
+                            ? reset.transfers.map(t => '¥' + Number(t.amount).toFixed(2)).join('、')
                             : '已结清'}
                         </b>
                       </div>
