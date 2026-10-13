@@ -398,6 +398,7 @@ function TravelAA() {
     }
   };
 
+  // Historical settlement USD editor; visible in each saved settlement transfer.
   const editHistoricalTransferUsd = async (resetId: string, transferIndex: number, currentUsd: number) => {
     const input = window.prompt('修改这笔历史转账的美元金额（USD）', Number(currentUsd || 0).toFixed(2));
     if (input === null) return;
