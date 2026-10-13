@@ -568,10 +568,12 @@ function TravelAA() {
     return out;
   }, [people, balances, settlementRateValue]);
 
-  // 账单余额始终只由历史账单计算；个人清算只改变“待转账”的显示状态。
+  // 新版结清使用固定的 USD/CNY 余额调整；不再把历史转账按固定人民币金额重复冲销。
+  // 兼容旧版记录：只有旧记录（USD/CNY 调整均为 0）继续使用历史转账冲销。
   const displaySettlementBalances = useMemo(() => {
     const out = { ...settlementBalances };
     settlementResets.forEach(reset => {
+      if (Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0) return;
       (reset.transfers || []).forEach(t => {
         const amount = Number(t.amount || 0);
         if (!(amount > 0)) return;
@@ -626,9 +628,11 @@ function TravelAA() {
       }));
     setSaving(true);
     try {
+      // 把结清时该成员当前的 USD/CNY 净余额冻结为调整值。
+      // 之后新增账单仍会正常计入；汇率变化只影响未结清的 USD 余额。
       await api.post('/api/people/' + encodeURIComponent(person.id) + '/settlement-reset', {
-        usdAdjustment: 0,
-        cnyAdjustment: 0,
+        usdAdjustment: Number((-(balances.usd[person.id] || 0)).toFixed(6)),
+        cnyAdjustment: Number((-(balances.cny[person.id] || 0)).toFixed(2)),
         transfers: relatedTransfers,
       });
       await load();
