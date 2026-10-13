@@ -633,11 +633,11 @@ function TravelAA() {
       }));
     setSaving(true);
     try {
-      // 保留实际结清时的人民币金额用于历史记录，同时保存 USD 等值用于余额冲销。
-      // 这样汇率变化时，已结清部分会与美元账本一起换算，不会重新产生欠款。
+      // 结清时分别冻结该成员的 USD 与 CNY 净余额，不能把混合币种的转账总额都当成 USD。
+      // 历史转账金额仍保留供记录查看；余额只通过固定的 USD/CNY 调整冲销。
       await api.post('/api/people/' + encodeURIComponent(person.id) + '/settlement-reset', {
-        usdAdjustment: 0,
-        cnyAdjustment: 0,
+        usdAdjustment: Number((-(balances.usd[person.id] || 0)).toFixed(6)),
+        cnyAdjustment: Number((-(balances.cny[person.id] || 0)).toFixed(2)),
         transfers: relatedTransfers,
       });
       await load();
