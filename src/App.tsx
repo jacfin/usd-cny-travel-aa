@@ -225,7 +225,7 @@ const today = new Date().toISOString().slice(0, 10);
 function TravelAA() {
   const [people, setPeople] = useState<Person[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
-  const [settlementResets, setSettlementResets] = useState<Array<{personId:string; resetAt:string; usdAdjustment:number; cnyAdjustment:number; transfers:Array<{fromId:string; toId:string; fromName:string; toName:string; amount:number}>}>>([]);
+  const [settlementResets, setSettlementResets] = useState<Array<{personId:string; resetAt:string; usdAdjustment:number; cnyAdjustment:number; transfers:Array<{fromId:string; toId:string; fromName:string; toName:string; amount:number; amountUsd?:number}>}>>([]);
   const [settlementRate, setSettlementRate] = useState<number | null>(null);
   const [tab, setTab] = useState<'add' | 'history' | 'settle'>('add');
   const [personName, setPersonName] = useState('');
@@ -575,7 +575,11 @@ function TravelAA() {
     settlementResets.forEach(reset => {
       if (Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0) return;
       (reset.transfers || []).forEach(t => {
-        const amount = Number(t.amount || 0);
+        // 新记录保存结清时的 USD 等值，展示时随当前 USD/CNY 汇率换算；
+        // 旧记录没有 amountUsd，继续按旧版固定人民币金额兼容显示。
+        const amount = t.amountUsd !== undefined
+          ? Number(t.amountUsd || 0) * settlementRateValue
+          : Number(t.amount || 0);
         if (!(amount > 0)) return;
         if (out[t.fromId] !== undefined) out[t.fromId] += amount;
         if (out[t.toId] !== undefined) out[t.toId] -= amount;
@@ -625,14 +629,15 @@ function TravelAA() {
         fromName: personNameOf(t.from),
         toName: personNameOf(t.to),
         amount: Number(t.amount.toFixed(2)),
+        amountUsd: Number((settlementRateValue > 0 ? t.amount / settlementRateValue : 0).toFixed(6)),
       }));
     setSaving(true);
     try {
-      // 把结清时该成员当前的 USD/CNY 净余额冻结为调整值。
-      // 之后新增账单仍会正常计入；汇率变化只影响未结清的 USD 余额。
+      // 保留实际结清时的人民币金额用于历史记录，同时保存 USD 等值用于余额冲销。
+      // 这样汇率变化时，已结清部分会与美元账本一起换算，不会重新产生欠款。
       await api.post('/api/people/' + encodeURIComponent(person.id) + '/settlement-reset', {
-        usdAdjustment: Number((-(balances.usd[person.id] || 0)).toFixed(6)),
-        cnyAdjustment: Number((-(balances.cny[person.id] || 0)).toFixed(2)),
+        usdAdjustment: 0,
+        cnyAdjustment: 0,
         transfers: relatedTransfers,
       });
       await load();
