@@ -973,6 +973,9 @@ function TravelAA() {
               <div className="settlementRateHint" style={{fontSize:'0.85em', marginTop:'6px', marginBottom:'12px', opacity:0.85, lineHeight:1.5, overflowWrap:'anywhere'}}>
                 {settlementRateStatus || '汇率更新时间'}{settlementRateUpdatedAt ? ' · ' + new Date(settlementRateUpdatedAt).toLocaleString('zh-CN', {hour12:false}) : ''}
               </div>
+              <div className="settlementRateHint" style={{fontSize:'0.85em', marginTop:'-6px', marginBottom:'12px', opacity:0.85}}>
+                本次结算 USD/CNY：{settlementRateValue > 0 ? settlementRateValue.toFixed(4) : '获取中…'}
+              </div>
               <div className="personalResetArea">
                 <div className="personalResetTitle">结清账款</div>
                 <div className="personalResetList">
@@ -997,9 +1000,6 @@ function TravelAA() {
                           <b>{personNameOf(reset.personId)}</b>
                           <small style={{display:'block', marginTop:'4px'}}>
                             {new Date(reset.resetAt).toLocaleString('zh-CN', {hour12:false})}
-                          </small>
-                          <small style={{display:'block', marginTop:'4px', opacity:0.8}}>
-                            本次结算 USD/CNY：{settlementRateValue > 0 ? settlementRateValue.toFixed(4) : '获取中…'}
                           </small>
                           {reset.transfers?.length ? reset.transfers.map((t, j) => (
                             <div key={j} style={{marginTop:'6px'}}>
