@@ -651,15 +651,30 @@ function TravelAA() {
     }
   };
 
+  const [settlementRateUpdatedAt, setSettlementRateUpdatedAt] = useState('');
+  const [settlementRateStatus, setSettlementRateStatus] = useState('');
   const refreshSettlementRate = async () => {
+    setSettlementRateStatus('正在刷新汇率…');
     try {
       const response = await api.get('/api/rates/usd-cny?force=1');
       const data = response.data as RateResponse;
       if (!(data.rate > 0)) throw new Error('invalid rate');
       setSettlementRate(data.rate);
+      const updated = data.updatedAt || new Date().toISOString();
+      setSettlementRateUpdatedAt(updated);
+      setSettlementRateStatus(data.stale ? '汇率源暂不可用，使用上次成功值' : data.cached ? '已加载缓存汇率' : '汇率已更新');
+      localStorage.setItem('usd_cny_last_rate', String(data.rate));
+      localStorage.setItem('usd_cny_last_updated_at', updated);
     } catch {
       const cached = Number(localStorage.getItem('usd_cny_last_rate'));
-      if (cached > 0) setSettlementRate(cached);
+      const cachedAt = localStorage.getItem('usd_cny_last_updated_at') || '';
+      if (cached > 0) {
+        setSettlementRate(cached);
+        setSettlementRateUpdatedAt(cachedAt);
+        setSettlementRateStatus('刷新失败，显示上次成功汇率');
+      } else {
+        setSettlementRateStatus('汇率获取失败，请点击汇率刷新重试');
+      }
     }
   };
   useEffect(() => {
@@ -991,6 +1006,9 @@ function TravelAA() {
                 )}
               </div>
               <div className="settlementRateHint">本次结算 USD/CNY：{settlementRateValue > 0 ? settlementRateValue.toFixed(4) : '获取中…'}</div>
+              <div className="settlementRateHint" style={{fontSize:'0.85em', marginTop:'4px', opacity:0.8}}>
+                {settlementRateStatus}{settlementRateUpdatedAt ? ' · ' + new Date(settlementRateUpdatedAt).toLocaleString('zh-CN', {hour12:false}) : ''}
+              </div>
               <div className="resetArea">
                 <button className="resetButton" type="button" onClick={() => setResetModal(true)}>结清重置</button>
                 <div className="resetHint">清除全部账单记录，人员不会被删除。</div>
