@@ -980,7 +980,7 @@ function TravelAA() {
                 <div className="personalResetTitle">结清账款</div>
                 <div className="personalResetList">
                   {people.map(p => {
-                    const hasOutstandingBalance = Math.abs(displaySettlementBalancesUsd[p.id] || 0) >= 0.005;
+                    const hasOutstandingBalance = Math.abs(displaySettlementBalances[p.id] || 0) >= 0.005;
                     return (
                       <div className="personalResetRow" key={p.id}>
                         <span>{p.name}</span>
