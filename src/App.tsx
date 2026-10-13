@@ -998,6 +998,9 @@ function TravelAA() {
                           <small style={{display:'block', marginTop:'4px'}}>
                             {new Date(reset.resetAt).toLocaleString('zh-CN', {hour12:false})}
                           </small>
+                          <small style={{display:'block', marginTop:'4px', opacity:0.8}}>
+                            本次结算 USD/CNY：{settlementRateValue > 0 ? settlementRateValue.toFixed(4) : '获取中…'}
+                          </small>
                           {reset.transfers?.length ? reset.transfers.map((t, j) => (
                             <div key={j} style={{marginTop:'6px'}}>
                               {t.fromName} → {t.toName} <small>({Number(t.amountUsd ?? (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0)).toFixed(2)} USD)</small>
@@ -1016,7 +1019,6 @@ function TravelAA() {
                   <div className="empty">还没有记录转账。</div>
                 )}
               </div>
-              <div className="settlementRateHint">本次结算 USD/CNY：{settlementRateValue > 0 ? settlementRateValue.toFixed(4) : '获取中…'}</div>
               <div className="resetArea">
                 <button className="resetButton" type="button" onClick={() => setResetModal(true)}>结清重置</button>
                 <div className="resetHint">清除全部账单记录，人员不会被删除。</div>
