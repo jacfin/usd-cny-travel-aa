@@ -594,7 +594,7 @@ function TravelAA() {
     const hasLegacyReset = settlementResets.some(reset => Number(reset.usdAdjustment || 0) === 0 && Number(reset.cnyAdjustment || 0) === 0);
     if (hasLegacyReset) {
       Object.keys(out).forEach(id => {
-        if (Math.abs(out[id]) < 0.10) out[id] = 0;
+        if (Math.abs(out[id]) < 0.25) out[id] = 0;
       });
     }
     return out;
