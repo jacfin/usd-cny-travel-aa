@@ -979,14 +979,21 @@ function TravelAA() {
               <div className="personalResetArea">
                 <div className="personalResetTitle">结清账款</div>
                 <div className="personalResetList">
-                  {people.map(p => (
-                    <div className="personalResetRow" key={p.id}>
-                      <span>{p.name}</span>
-                      <button type="button" className="personalResetButton" onClick={() => setPersonResetTarget(p)} disabled={saving}>
-                        结清账款
-                      </button>
-                    </div>
-                  ))}
+                  {people.map(p => {
+                    const hasOutstandingBalance = Math.abs(displaySettlementBalancesUsd[p.id] || 0) >= 0.005;
+                    return (
+                      <div className="personalResetRow" key={p.id}>
+                        <span>{p.name}</span>
+                        {hasOutstandingBalance ? (
+                          <button type="button" className="personalResetButton" onClick={() => setPersonResetTarget(p)} disabled={saving}>
+                            结清账款
+                          </button>
+                        ) : (
+                          <span className="personalResetHint" style={{margin:0}}>已平账</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="personalResetHint">点击后表示这个人当前显示的应付/应收已经实际完成转账；历史账单、分摊记录、人员姓名全部保留，并留下本次实际转账记录。</div>
               </div>
