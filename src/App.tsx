@@ -398,33 +398,6 @@ function TravelAA() {
     }
   };
 
-  // Historical settlement USD editor; visible in each saved settlement transfer.
-  const editHistoricalTransferUsd = async (resetId: string, transferIndex: number, currentUsd: number) => {
-    const input = window.prompt('修改这笔历史转账的美元金额（USD）', Number(currentUsd || 0).toFixed(2));
-    if (input === null) return;
-    const amountUsd = Number(input.trim());
-    if (!input.trim() || !Number.isFinite(amountUsd) || amountUsd < 0) {
-      setModalMessage('请输入有效的美元金额，例如 975。');
-      setRateModal(true);
-      return;
-    }
-    setSaving(true);
-    try {
-      await api.put('/api/settlement-resets/' + encodeURIComponent(resetId) + '/transfer-usd', {
-        transferIndex,
-        amountUsd,
-      });
-      await load();
-      setModalMessage('历史转账美元金额已更新。');
-      setRateModal(true);
-    } catch {
-      setModalMessage('修改历史美元金额失败，请稍后重试。');
-      setRateModal(true);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const renamePerson = async (person: Person) => {
     const next = window.prompt('修改人员名称', person.name)?.trim();
     if (!next || next === person.name) return;
@@ -1028,7 +1001,6 @@ function TravelAA() {
                           {reset.transfers?.length ? reset.transfers.map((t, j) => (
                             <div key={j} style={{marginTop:'6px'}}>
                               {t.fromName} → {t.toName} <small>({Number(t.amountUsd ?? (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0)).toFixed(2)} USD)</small>
-                              <button type="button" disabled={saving} style={{marginLeft:'8px', padding:'3px 8px', fontSize:'0.8em'}} onClick={() => void editHistoricalTransferUsd(reset.id, j, Number(t.amountUsd ?? (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0)))}>修改美元金额</button>
                             </div>
                           )) : <div style={{marginTop:'6px'}}>本次重置时已无待转账</div>}
                         </div>
