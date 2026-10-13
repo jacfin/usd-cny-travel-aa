@@ -651,6 +651,7 @@ function TravelAA() {
     }
   };
 
+  // Keep settlement-rate refresh feedback visible in the settlement panel.
   const [settlementRateUpdatedAt, setSettlementRateUpdatedAt] = useState('');
   const [settlementRateStatus, setSettlementRateStatus] = useState('');
   const refreshSettlementRate = async () => {
