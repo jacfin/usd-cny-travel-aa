@@ -230,6 +230,25 @@ async function handleApi(request, env) {
     } catch(e) { return fail('Mastercard 官方汇率暂时无法获取',503); }
   }
 
+  const settlementTransferEditMatch = path.match(/^\/api\/settlement-resets\/([^/]+)\/transfer-usd$/);
+  if (settlementTransferEditMatch && method==='PUT') {
+    const recordId = decodeURIComponent(settlementTransferEditMatch[1]);
+    const body = await request.json().catch(() => ({}));
+    const transferIndex = Number(body?.transferIndex);
+    const amountUsd = Number(body?.amountUsd);
+    if (!Number.isInteger(transferIndex) || transferIndex < 0 || !Number.isFinite(amountUsd) || amountUsd < 0 || amountUsd > 100000000) {
+      return fail('invalid transfer index or USD amount', 400);
+    }
+    const row = await env.DB.prepare('SELECT transfers_json FROM settlement_reset_records WHERE id=?').bind(recordId).first();
+    if (!row) return fail('settlement record not found', 404);
+    let transfers;
+    try { transfers = JSON.parse(row.transfers_json || '[]'); } catch { return fail('invalid stored transfer history', 500); }
+    if (!Array.isArray(transfers) || !transfers[transferIndex]) return fail('transfer not found', 404);
+    transfers[transferIndex].amountUsd = Number(amountUsd.toFixed(6));
+    await env.DB.prepare('UPDATE settlement_reset_records SET transfers_json=? WHERE id=?').bind(JSON.stringify(transfers), recordId).run();
+    return json({ok:true, recordId, transferIndex, amountUsd:transfers[transferIndex].amountUsd});
+  }
+
   if (method==='GET' && path==='/api/people') return json({people:await listPeople(env)});
   if (method==='GET' && path==='/api/settlement-resets') {
     const r=await env.DB.prepare('SELECT id,person_id,reset_at,usd_adjustment,cny_adjustment,transfers_json FROM settlement_reset_records WHERE transfers_json <> "[]" ORDER BY reset_at ASC').all();
