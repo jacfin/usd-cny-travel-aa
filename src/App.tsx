@@ -958,7 +958,7 @@ function TravelAA() {
                   {transfers.map((t, i) => (
                     <div className="transfer" key={i}>
                       <span>
-                        {personNameOf(t.from)} → {personNameOf(t.to)}
+                        {personNameOf(t.from)} → {personNameOf(t.to)} <small>({t.amount.toFixed(2)} USD)</small>
                       </span>
                       <b>{'¥' + (t.amount * settlementRateValue).toFixed(2)}</b>
                     </div>
@@ -1000,13 +1000,13 @@ function TravelAA() {
                           </small>
                           {reset.transfers?.length ? reset.transfers.map((t, j) => (
                             <div key={j} style={{marginTop:'6px'}}>
-                              {t.fromName} → {t.toName}
+                              {t.fromName} → {t.toName} <small>({Number(t.amountUsd ?? (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0)).toFixed(2)} USD)</small>
                             </div>
                           )) : <div style={{marginTop:'6px'}}>本次重置时已无待转账</div>}
                         </div>
                         <b>
                           {reset.transfers?.length
-                            ? reset.transfers.map(t => '¥' + Number(t.amount).toFixed(2)).join('、')
+                            ? reset.transfers.map(t => '¥' + Number(t.amount).toFixed(2) + ' (' + Number(t.amountUsd ?? (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0)).toFixed(2) + ' USD)').join('、')
                             : '已结清'}
                         </b>
                       </div>
