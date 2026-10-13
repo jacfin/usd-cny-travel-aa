@@ -931,7 +931,7 @@ function TravelAA() {
               <h3>每个人最终净额</h3>
               <div className="balances">
                 {people.map(p => {
-                  const value = settlementBalances[p.id] || 0;
+                  const value = displaySettlementBalances[p.id] || 0;
                   return (
                     <div className="balance" key={p.id}>
                       <span>{p.name}</span>
