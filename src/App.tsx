@@ -557,42 +557,54 @@ function TravelAA() {
   }, [people, bills, settlementResets]);
 
   const settlementRateValue = settlementRate || 0;
-  const settlementBalances = useMemo(() => {
+  // 结算内部统一以 USD 作为计算单位：外币账单已在录入时锁定 USD；
+  // CNY 账单只在结算时按当前 USD/CNY 换算为 USD，最终展示时再换回 CNY。
+  const settlementBalancesUsd = useMemo(() => {
     const out: Record<string, number> = {};
     people.forEach(p => {
-      const baseCny =
-        (balances.usd[p.id] || 0) * settlementRateValue +
-        (balances.cny[p.id] || 0);
-      out[p.id] = baseCny;
+      const cnyAsUsd = settlementRateValue > 0 ? (balances.cny[p.id] || 0) / settlementRateValue : 0;
+      out[p.id] = (balances.usd[p.id] || 0) + cnyAsUsd;
     });
     return out;
   }, [people, balances, settlementRateValue]);
+  const settlementBalances = useMemo(() => {
+    const out: Record<string, number> = {};
+    people.forEach(p => {
+      out[p.id] = (settlementBalancesUsd[p.id] || 0) * settlementRateValue;
+    });
+    return out;
+  }, [people, settlementBalancesUsd, settlementRateValue]);
 
-  // 兼容旧版结清记录：旧记录没有 USD/CNY 冻结调整，必须用历史转账冲销旧余额；
-  // 新版结清记录已通过 balances 内的 USD/CNY adjustment 冻结，因此不会重复冲销。
-  const displaySettlementBalances = useMemo(() => {
-    const out = { ...settlementBalances };
+  // 兼容旧版结清记录：旧记录没有 USD/CNY 冻结调整，使用历史转账冲销旧余额。
+  // 新版结清记录通过固定的 USD/CNY adjustment 冻结，不重复冲销。
+  const displaySettlementBalancesUsd = useMemo(() => {
+    const out = { ...settlementBalancesUsd };
     settlementResets.forEach(reset => {
       if (Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0) return;
       (reset.transfers || []).forEach(t => {
-        const amount = t.amountUsd !== undefined
-          ? Number(t.amountUsd || 0) * settlementRateValue
-          : Number(t.amount || 0);
-        if (!(amount > 0)) return;
-        if (out[t.fromId] !== undefined) out[t.fromId] += amount;
-        if (out[t.toId] !== undefined) out[t.toId] -= amount;
+        const amountUsd = t.amountUsd !== undefined
+          ? Number(t.amountUsd || 0)
+          : (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0);
+        if (!(amountUsd > 0)) return;
+        if (out[t.fromId] !== undefined) out[t.fromId] += amountUsd;
+        if (out[t.toId] !== undefined) out[t.toId] -= amountUsd;
       });
     });
     return out;
-  }, [settlementBalances, settlementResets, settlementRateValue]);
+  }, [settlementBalancesUsd, settlementResets, settlementRateValue]);
+  const displaySettlementBalances = useMemo(() => {
+    const out: Record<string, number> = {};
+    people.forEach(p => { out[p.id] = (displaySettlementBalancesUsd[p.id] || 0) * settlementRateValue; });
+    return out;
+  }, [people, displaySettlementBalancesUsd, settlementRateValue]);
 
   const transfers = useMemo(() => {
-    const debtors = Object.entries(displaySettlementBalances)
-      .filter(x => x[1] < -0.005)
+    const debtors = Object.entries(displaySettlementBalancesUsd)
+      .filter(x => x[1] < -0.0005)
       .map(x => ({ id: x[0], value: -x[1] }))
       .sort((a, b) => b.value - a.value);
-    const creditors = Object.entries(displaySettlementBalances)
-      .filter(x => x[1] > 0.005)
+    const creditors = Object.entries(displaySettlementBalancesUsd)
+      .filter(x => x[1] > 0.0005)
       .map(x => ({ id: x[0], value: x[1] }))
       .sort((a, b) => b.value - a.value);
     const result: Array<{ from: string; to: string; amount: number }> = [];
@@ -600,19 +612,14 @@ function TravelAA() {
     let j = 0;
     while (i < debtors.length && j < creditors.length) {
       const value = Math.min(debtors[i].value, creditors[j].value);
-      if (value > 0.005)
-        result.push({
-          from: debtors[i].id,
-          to: creditors[j].id,
-          amount: value,
-        });
+      if (value > 0.0005) result.push({ from: debtors[i].id, to: creditors[j].id, amount: value });
       debtors[i].value -= value;
       creditors[j].value -= value;
-      if (debtors[i].value < 0.005) i++;
-      if (creditors[j].value < 0.005) j++;
+      if (debtors[i].value < 0.0005) i++;
+      if (creditors[j].value < 0.0005) j++;
     }
     return result;
-  }, [displaySettlementBalances]);
+  }, [displaySettlementBalancesUsd]);
 
   const personNameOf = (id: string) =>
     people.find(p => p.id === id)?.name || '未知人员';
@@ -626,8 +633,8 @@ function TravelAA() {
         toId: t.to,
         fromName: personNameOf(t.from),
         toName: personNameOf(t.to),
-        amount: Number(t.amount.toFixed(2)),
-        amountUsd: Number((settlementRateValue > 0 ? t.amount / settlementRateValue : 0).toFixed(6)),
+        amount: Number((t.amount * settlementRateValue).toFixed(2)),
+        amountUsd: Number(t.amount.toFixed(6)),
       }));
     setSaving(true);
     try {
@@ -905,7 +912,7 @@ function TravelAA() {
         <section className="card">
           <h2>AA 最终结算</h2>
           <p className="hint">
-            CNY 账单始终按人民币记录；其他币种在录入时固定换算为 USD。进入本页时只刷新一次 USD/CNY，最终统一显示人民币。
+            CNY 账单保留人民币原值；其他币种录入时锁定 USD。后台统一按 USD 计算，最终按当前 USD/CNY 汇率显示人民币。
           </p>
           <div className="summary">
             <div>
@@ -953,7 +960,7 @@ function TravelAA() {
                       <span>
                         {personNameOf(t.from)} → {personNameOf(t.to)}
                       </span>
-                      <b>{'¥' + t.amount.toFixed(2)}</b>
+                      <b>{'¥' + (t.amount * settlementRateValue).toFixed(2)}</b>
                     </div>
                   ))}
                 </div>
@@ -962,6 +969,9 @@ function TravelAA() {
               )}
               <div className="buttons">
                 <button type="button" onClick={() => void refreshSettlementRate()}>汇率刷新</button>
+              </div>
+              <div className="settlementRateHint" style={{fontSize:'0.85em', marginTop:'-8px', marginBottom:'12px', opacity:0.85}}>
+                {settlementRateStatus || '汇率更新时间'}{settlementRateUpdatedAt ? ' · ' + new Date(settlementRateUpdatedAt).toLocaleString('zh-CN', {hour12:false}) : ''}
               </div>
               <div className="personalResetArea">
                 <div className="personalResetTitle">结清账款</div>
@@ -1007,9 +1017,6 @@ function TravelAA() {
                 )}
               </div>
               <div className="settlementRateHint">本次结算 USD/CNY：{settlementRateValue > 0 ? settlementRateValue.toFixed(4) : '获取中…'}</div>
-              <div className="settlementRateHint" style={{fontSize:'0.85em', marginTop:'4px', opacity:0.8}}>
-                {settlementRateStatus}{settlementRateUpdatedAt ? ' · ' + new Date(settlementRateUpdatedAt).toLocaleString('zh-CN', {hour12:false}) : ''}
-              </div>
               <div className="resetArea">
                 <button className="resetButton" type="button" onClick={() => setResetModal(true)}>结清重置</button>
                 <div className="resetHint">清除全部账单记录，人员不会被删除。</div>
