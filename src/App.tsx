@@ -699,6 +699,19 @@ function TravelAA() {
   }, [tab]);
   const totalCny = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? b.amount : 0), 0);
   const totalUsd = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? 0 : (b.usdAmount ?? b.amount)), 0);
+  // 个人累计付款只统计每笔账单的付款人实际付出的总额；
+  // 不扣除个人分摊、不受结清记录影响，与下方 AA 净额/转账计算完全独立。
+  const personalPaidTotals = useMemo(() => {
+    const out: Record<string, number> = {};
+    people.forEach(p => { out[p.id] = 0; });
+    bills.forEach(b => {
+      if (out[b.payerId] === undefined) return;
+      out[b.payerId] += b.currency === 'CNY'
+        ? Number(b.amount || 0)
+        : Number(b.usdAmount ?? b.amount ?? 0) * settlementRateValue;
+    });
+    return out;
+  }, [people, bills, settlementRateValue]);
 
   return (
     <main className="wrap">
@@ -935,26 +948,14 @@ function TravelAA() {
             <div className="empty">还没有账单。</div>
           ) : (
             <>
-              <h3>每个人最终净额</h3>
+              <h3>每个人累计付款</h3>
               <div className="balances">
                 {people.map(p => {
-                  const value = displaySettlementBalances[p.id] || 0;
+                  const value = personalPaidTotals[p.id] || 0;
                   return (
                     <div className="balance" key={p.id}>
                       <span>{p.name}</span>
-                      <strong
-                        className={
-                          value > 0.005 ? 'get' : value < -0.005 ? 'pay' : ''
-                        }
-                      >
-                        {value > 0.005 ? '+' : ''}
-                        {'¥' + value.toFixed(2)}{' '}
-                        {value > 0.005
-                          ? '应收'
-                          : value < -0.005
-                            ? '应付'
-                            : '已平'}
-                      </strong>
+                      <strong>{'¥' + value.toFixed(2)} 累计付款</strong>
                     </div>
                   );
                 })}
