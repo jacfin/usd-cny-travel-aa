@@ -968,7 +968,7 @@ function TravelAA() {
                         垫付 { '¥' + paid.toFixed(2) }
                         <br />
                         <small style={{fontWeight:500, fontSize:'0.88em', opacity:0.85}}>
-                          AA 后实际费用 { '¥' + actual.toFixed(2) }
+                          实际费用 { '¥' + actual.toFixed(2) }
                         </small>
                       </strong>
                     </div>
