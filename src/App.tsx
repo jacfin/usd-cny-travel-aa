@@ -580,14 +580,21 @@ function TravelAA() {
   const displaySettlementBalancesUsd = useMemo(() => {
     const out = { ...settlementBalancesUsd };
     settlementResets.forEach(reset => {
-      if (Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0) return;
+      const hasSnapshotAdjustment = Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0;
       (reset.transfers || []).forEach(t => {
         const amountUsd = t.amountUsd !== undefined
           ? Number(t.amountUsd || 0)
           : (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0);
         if (!(amountUsd > 0)) return;
-        if (out[t.fromId] !== undefined) out[t.fromId] += amountUsd;
-        if (out[t.toId] !== undefined) out[t.toId] -= amountUsd;
+        // Legacy records have no balance snapshot, so offset both transfer parties.
+        // New records snapshot the clicked person's balance; only offset the counterparty
+        // here, otherwise the clicked person would be offset twice and the balances stop summing to zero.
+        if (!hasSnapshotAdjustment || reset.personId !== t.fromId) {
+          if (out[t.fromId] !== undefined) out[t.fromId] += amountUsd;
+        }
+        if (!hasSnapshotAdjustment || reset.personId !== t.toId) {
+          if (out[t.toId] !== undefined) out[t.toId] -= amountUsd;
+        }
       });
     });
     return out;
