@@ -701,16 +701,24 @@ function TravelAA() {
   const totalUsd = bills.reduce((sum, b) => sum + (b.currency === 'CNY' ? 0 : (b.usdAmount ?? b.amount)), 0);
   // 个人累计付款只统计每笔账单的付款人实际付出的总额；
   // 不扣除个人分摊、不受结清记录影响，与下方 AA 净额/转账计算完全独立。
-  const personalPaidTotals = useMemo(() => {
-    const out: Record<string, number> = {};
-    people.forEach(p => { out[p.id] = 0; });
+  const personalExpenseTotals = useMemo(() => {
+    const paid: Record<string, number> = {};
+    const actual: Record<string, number> = {};
+    people.forEach(p => { paid[p.id] = 0; actual[p.id] = 0; });
     bills.forEach(b => {
-      if (out[b.payerId] === undefined) return;
-      out[b.payerId] += b.currency === 'CNY'
+      const amountCny = b.currency === 'CNY'
         ? Number(b.amount || 0)
         : Number(b.usdAmount ?? b.amount ?? 0) * settlementRateValue;
+      if (paid[b.payerId] !== undefined) paid[b.payerId] += amountCny;
+      const participants = Array.isArray(b.shareIds) ? b.shareIds : [];
+      if (participants.length > 0) {
+        const perPerson = amountCny / participants.length;
+        participants.forEach(id => {
+          if (actual[id] !== undefined) actual[id] += perPerson;
+        });
+      }
     });
-    return out;
+    return { paid, actual };
   }, [people, bills, settlementRateValue]);
 
   return (
@@ -948,14 +956,21 @@ function TravelAA() {
             <div className="empty">还没有账单。</div>
           ) : (
             <>
-              <h3>每个人累计付款</h3>
+              <h3>垫付金额 / AA 后实际费用</h3>
               <div className="balances">
                 {people.map(p => {
-                  const value = personalPaidTotals[p.id] || 0;
+                  const paid = personalExpenseTotals.paid[p.id] || 0;
+                  const actual = personalExpenseTotals.actual[p.id] || 0;
                   return (
-                    <div className="balance" key={p.id}>
+                    <div className="balance" key={p.id} style={{alignItems:'flex-start', gap:'8px'}}>
                       <span>{p.name}</span>
-                      <strong>{'¥' + value.toFixed(2)} 累计付款</strong>
+                      <strong style={{textAlign:'right', whiteSpace:'normal'}}>
+                        垫付 { '¥' + paid.toFixed(2) }
+                        <br />
+                        <small style={{fontWeight:500, fontSize:'0.88em', opacity:0.85}}>
+                          AA 后实际费用 { '¥' + actual.toFixed(2) }
+                        </small>
+                      </strong>
                     </div>
                   );
                 })}
