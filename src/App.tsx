@@ -225,7 +225,7 @@ const today = new Date().toISOString().slice(0, 10);
 function TravelAA() {
   const [people, setPeople] = useState<Person[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
-  const [settlementResets, setSettlementResets] = useState<Array<{id:string; personId:string; resetAt:string; usdAdjustment:number; cnyAdjustment:number; transfers:Array<{fromId:string; toId:string; fromName:string; toName:string; amount:number; amountUsd?:number}>}>>([]);
+  const [settlementResets, setSettlementResets] = useState<Array<{id:string; personId:string; resetAt:string; usdAdjustment:number; cnyAdjustment:number; hasSnapshot?:boolean; transfers:Array<{fromId:string; toId:string; fromName:string; toName:string; amount:number; amountUsd?:number}>}>>([]);
   const [settlementRate, setSettlementRate] = useState<number | null>(null);
   const [tab, setTab] = useState<'add' | 'history' | 'settle'>('add');
   const [personName, setPersonName] = useState('');
@@ -582,7 +582,7 @@ function TravelAA() {
     // 判断是否为新版结清记录，要看字段是否存在，而不是金额是否非零。
     // 新版记录即使调整额恰好为 0，也不能被当作旧版记录再次冲销。
     const hasSnapshotAdjustment = (reset: typeof settlementResets[number]) =>
-      reset.usdAdjustment !== undefined || reset.cnyAdjustment !== undefined;
+      reset.hasSnapshot === true;
     const snapshotAdjustedPeople = new Set(
       settlementResets
         .filter(hasSnapshotAdjustment)
