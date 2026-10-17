@@ -538,7 +538,8 @@ function TravelAA() {
     });
     // Do not apply a cutoff until every current participant has a settlement record.
     if (!people.every(person => latestByPerson.has(person.id))) return '';
-    const latestResetAt = [...latestByPerson.values()].sort().at(-1) || '';
+    const sortedResetTimes = [...latestByPerson.values()].sort();
+    const latestResetAt = sortedResetTimes[sortedResetTimes.length - 1] || '';
     return latestResetAt ? latestResetAt.slice(0, 10) : '';
   }, [people, settlementResets]);
 
