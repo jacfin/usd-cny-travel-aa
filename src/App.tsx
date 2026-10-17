@@ -538,9 +538,11 @@ function TravelAA() {
     });
     // Do not apply a cutoff until every current participant has a settlement record.
     if (!people.every(person => latestByPerson.has(person.id))) return '';
+    // The shared cutoff can advance only as far as the participant who was
+    // settled least recently; settling one person must not clear the other's debt.
     const sortedResetTimes = [...latestByPerson.values()].sort();
-    const latestResetAt = sortedResetTimes[sortedResetTimes.length - 1] || '';
-    return latestResetAt ? latestResetAt.slice(0, 10) : '';
+    const latestFullySettledAt = sortedResetTimes[0] || '';
+    return latestFullySettledAt ? latestFullySettledAt.slice(0, 10) : '';
   }, [people, settlementResets]);
 
   const balances = useMemo(() => {
