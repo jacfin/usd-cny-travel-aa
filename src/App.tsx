@@ -526,6 +526,22 @@ function TravelAA() {
     }
   };
 
+  // AA settlement is calculated only from bills entered after the latest completed
+  // settlement date. Historical bills remain visible and continue contributing to
+  // lifetime paid/actual-expense statistics, but must not reopen old debts.
+  const settlementCutoffDate = useMemo(() => {
+    if (!people.length) return '';
+    const latestByPerson = new Map<string, string>();
+    settlementResets.forEach(reset => {
+      const current = latestByPerson.get(reset.personId) || '';
+      if (reset.resetAt > current) latestByPerson.set(reset.personId, reset.resetAt);
+    });
+    // Do not apply a cutoff until every current participant has a settlement record.
+    if (!people.every(person => latestByPerson.has(person.id))) return '';
+    const latestResetAt = [...latestByPerson.values()].sort().at(-1) || '';
+    return latestResetAt ? latestResetAt.slice(0, 10) : '';
+  }, [people, settlementResets]);
+
   const balances = useMemo(() => {
     const validIds = new Set(people.map(p => p.id));
     const usd: Record<string, number> = {};
@@ -534,7 +550,10 @@ function TravelAA() {
       usd[p.id] = 0;
       cny[p.id] = 0;
     });
-    bills.forEach(b => {
+    const activeBills = settlementCutoffDate
+      ? bills.filter(b => b.date > settlementCutoffDate)
+      : bills;
+    activeBills.forEach(b => {
       if (!validIds.has(b.payerId)) return;
       const ids = b.shareIds.filter(id => validIds.has(id));
       if (!ids.length) return;
@@ -547,14 +566,8 @@ function TravelAA() {
         target[id] -= each;
       });
     });
-    settlementResets.forEach(reset => {
-      if (validIds.has(reset.personId)) {
-        usd[reset.personId] += Number(reset.usdAdjustment || 0);
-        cny[reset.personId] += Number(reset.cnyAdjustment || 0);
-      }
-    });
     return { usd, cny };
-  }, [people, bills, settlementResets]);
+  }, [people, bills, settlementCutoffDate]);
 
   const settlementRateValue = settlementRate || 0;
   // 结算内部统一以 USD 作为计算单位：外币账单已在录入时锁定 USD；
@@ -575,45 +588,9 @@ function TravelAA() {
     return out;
   }, [people, settlementBalancesUsd, settlementRateValue]);
 
-  // 兼容旧版结清记录：旧记录没有 USD/CNY 冻结调整，使用历史转账冲销旧余额。
-  // 新版结清记录通过固定的 USD/CNY adjustment 冻结，不重复冲销。
-  const displaySettlementBalancesUsd = useMemo(() => {
-    const out = { ...settlementBalancesUsd };
-    // 判断是否为新版结清记录，要看字段是否存在，而不是金额是否非零。
-    // 新版记录即使调整额恰好为 0，也不能被当作旧版记录再次冲销。
-    const hasSnapshotAdjustment = (reset: typeof settlementResets[number]) =>
-      reset.hasSnapshot === true;
-    const snapshotAdjustedPeople = new Set(
-      settlementResets
-        .filter(hasSnapshotAdjustment)
-        .map(reset => reset.personId)
-    );
-    settlementResets.forEach(reset => {
-      const hasSnapshot = hasSnapshotAdjustment(reset);
-      (reset.transfers || []).forEach(t => {
-        const amountUsd = t.amountUsd !== undefined
-          ? Number(t.amountUsd || 0)
-          : (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0);
-        if (!(amountUsd > 0)) return;
-        if (!hasSnapshot) {
-          // Legacy records have no balance snapshot, so offset both transfer parties.
-          if (out[t.fromId] !== undefined) out[t.fromId] += amountUsd;
-          if (out[t.toId] !== undefined) out[t.toId] -= amountUsd;
-          return;
-        }
-        // For snapshot-based settlements, only offset a counterparty who has not
-        // already been settled with their own snapshot. Otherwise two people settling
-        // the same transfer would cancel out later new bills between them.
-        if (reset.personId === t.fromId && !snapshotAdjustedPeople.has(t.toId)) {
-          if (out[t.toId] !== undefined) out[t.toId] -= amountUsd;
-        }
-        if (reset.personId === t.toId && !snapshotAdjustedPeople.has(t.fromId)) {
-          if (out[t.fromId] !== undefined) out[t.fromId] += amountUsd;
-        }
-      });
-    });
-    return out;
-  }, [settlementBalancesUsd, settlementResets, settlementRateValue]);
+  // Only bills after the settlement cutoff participate in current transfers.
+  // Do not replay old settlement transfer records against the new period.
+  const displaySettlementBalancesUsd = settlementBalancesUsd;
   const displaySettlementBalances = useMemo(() => {
     const out: Record<string, number> = {};
     people.forEach(p => { out[p.id] = (displaySettlementBalancesUsd[p.id] || 0) * settlementRateValue; });
