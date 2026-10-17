@@ -579,6 +579,11 @@ function TravelAA() {
   // 新版结清记录通过固定的 USD/CNY adjustment 冻结，不重复冲销。
   const displaySettlementBalancesUsd = useMemo(() => {
     const out = { ...settlementBalancesUsd };
+    const snapshotAdjustedPeople = new Set(
+      settlementResets
+        .filter(reset => Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0)
+        .map(reset => reset.personId)
+    );
     settlementResets.forEach(reset => {
       const hasSnapshotAdjustment = Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0;
       (reset.transfers || []).forEach(t => {
@@ -586,14 +591,20 @@ function TravelAA() {
           ? Number(t.amountUsd || 0)
           : (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0);
         if (!(amountUsd > 0)) return;
-        // Legacy records have no balance snapshot, so offset both transfer parties.
-        // New records snapshot the clicked person's balance; only offset the counterparty
-        // here, otherwise the clicked person would be offset twice and the balances stop summing to zero.
-        if (!hasSnapshotAdjustment || reset.personId !== t.fromId) {
+        if (!hasSnapshotAdjustment) {
+          // Legacy records have no balance snapshot, so offset both transfer parties.
           if (out[t.fromId] !== undefined) out[t.fromId] += amountUsd;
-        }
-        if (!hasSnapshotAdjustment || reset.personId !== t.toId) {
           if (out[t.toId] !== undefined) out[t.toId] -= amountUsd;
+          return;
+        }
+        // For snapshot-based settlements, only offset a counterparty who has not
+        // already been settled with their own snapshot. Otherwise two people settling
+        // the same transfer would cancel out later new bills between them.
+        if (reset.personId === t.fromId && !snapshotAdjustedPeople.has(t.toId)) {
+          if (out[t.toId] !== undefined) out[t.toId] -= amountUsd;
+        }
+        if (reset.personId === t.toId && !snapshotAdjustedPeople.has(t.fromId)) {
+          if (out[t.fromId] !== undefined) out[t.fromId] += amountUsd;
         }
       });
     });
