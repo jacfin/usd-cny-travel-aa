@@ -579,19 +579,23 @@ function TravelAA() {
   // 新版结清记录通过固定的 USD/CNY adjustment 冻结，不重复冲销。
   const displaySettlementBalancesUsd = useMemo(() => {
     const out = { ...settlementBalancesUsd };
+    // 判断是否为新版结清记录，要看字段是否存在，而不是金额是否非零。
+    // 新版记录即使调整额恰好为 0，也不能被当作旧版记录再次冲销。
+    const hasSnapshotAdjustment = (reset: SettlementReset) =>
+      reset.usdAdjustment !== undefined || reset.cnyAdjustment !== undefined;
     const snapshotAdjustedPeople = new Set(
       settlementResets
-        .filter(reset => Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0)
+        .filter(hasSnapshotAdjustment)
         .map(reset => reset.personId)
     );
     settlementResets.forEach(reset => {
-      const hasSnapshotAdjustment = Number(reset.usdAdjustment || 0) !== 0 || Number(reset.cnyAdjustment || 0) !== 0;
+      const hasSnapshot = hasSnapshotAdjustment(reset);
       (reset.transfers || []).forEach(t => {
         const amountUsd = t.amountUsd !== undefined
           ? Number(t.amountUsd || 0)
           : (settlementRateValue > 0 ? Number(t.amount || 0) / settlementRateValue : 0);
         if (!(amountUsd > 0)) return;
-        if (!hasSnapshotAdjustment) {
+        if (!hasSnapshot) {
           // Legacy records have no balance snapshot, so offset both transfer parties.
           if (out[t.fromId] !== undefined) out[t.fromId] += amountUsd;
           if (out[t.toId] !== undefined) out[t.toId] -= amountUsd;
