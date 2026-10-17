@@ -542,7 +542,12 @@ function TravelAA() {
     // settled least recently; settling one person must not clear the other's debt.
     const sortedResetTimes = [...latestByPerson.values()].sort();
     const latestFullySettledAt = sortedResetTimes[0] || '';
-    return latestFullySettledAt ? latestFullySettledAt.slice(0, 10) : '';
+    if (!latestFullySettledAt) return '';
+    const settledThrough = new Date(latestFullySettledAt);
+    if (Number.isNaN(settledThrough.getTime())) return '';
+    // Treat the entire settlement calendar day as settled; new bills begin next day.
+    settledThrough.setUTCDate(settledThrough.getUTCDate() + 1);
+    return settledThrough.toISOString().slice(0, 10);
   }, [people, settlementResets]);
 
   const balances = useMemo(() => {
