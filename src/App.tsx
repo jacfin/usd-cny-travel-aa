@@ -581,7 +581,7 @@ function TravelAA() {
     const out = { ...settlementBalancesUsd };
     // 判断是否为新版结清记录，要看字段是否存在，而不是金额是否非零。
     // 新版记录即使调整额恰好为 0，也不能被当作旧版记录再次冲销。
-    const hasSnapshotAdjustment = (reset: SettlementReset) =>
+    const hasSnapshotAdjustment = (reset: typeof settlementResets[number]) =>
       reset.usdAdjustment !== undefined || reset.cnyAdjustment !== undefined;
     const snapshotAdjustedPeople = new Set(
       settlementResets
