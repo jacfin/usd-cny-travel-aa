@@ -32,9 +32,13 @@ async function initDb(env) {
     env.DB.prepare('CREATE INDEX IF NOT EXISTS bills_date_idx ON bills(date)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_resets (person_id TEXT PRIMARY KEY, reset_at TEXT NOT NULL)'),
-    env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_reset_records (id TEXT PRIMARY KEY, person_id TEXT NOT NULL, reset_at TEXT NOT NULL, usd_adjustment REAL NOT NULL DEFAULT 0, cny_adjustment REAL NOT NULL DEFAULT 0, transfers_json TEXT NOT NULL DEFAULT \'[]\')'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_reset_records (id TEXT PRIMARY KEY, person_id TEXT NOT NULL, reset_at TEXT NOT NULL, usd_adjustment REAL NOT NULL DEFAULT 0, cny_adjustment REAL NOT NULL DEFAULT 0, transfers_json TEXT NOT NULL DEFAULT \'[]\', has_snapshot INTEGER NOT NULL DEFAULT 0)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS settlement_reset_records_time_idx ON settlement_reset_records(reset_at)'),
   ]);
+  // Existing rows default to has_snapshot=0 (legacy); new settlements explicitly set it to 1.
+  try {
+    await env.DB.prepare('ALTER TABLE settlement_reset_records ADD COLUMN has_snapshot INTEGER NOT NULL DEFAULT 0').run();
+  } catch {}
   await migrateLegacyData(env);
   await correctLegacyEchoTransferUsd(env);
   dbReady = true;
@@ -231,7 +235,7 @@ async function handleApi(request, env) {
 
   if (method==='GET' && path==='/api/people') return json({people:await listPeople(env)});
   if (method==='GET' && path==='/api/settlement-resets') {
-    const r=await env.DB.prepare('SELECT id,person_id,reset_at,usd_adjustment,cny_adjustment,transfers_json FROM settlement_reset_records WHERE transfers_json <> "[]" ORDER BY reset_at ASC').all();
+    const r=await env.DB.prepare('SELECT id,person_id,reset_at,usd_adjustment,cny_adjustment,transfers_json,has_snapshot FROM settlement_reset_records WHERE transfers_json <> "[]" ORDER BY reset_at ASC').all();
     return json({
       resets:r.results.map(x => ({
         id:String(x.id),
@@ -239,6 +243,7 @@ async function handleApi(request, env) {
         resetAt:String(x.reset_at),
         usdAdjustment:Number(x.usd_adjustment||0),
         cnyAdjustment:Number(x.cny_adjustment||0),
+        hasSnapshot:Number(x.has_snapshot||0) === 1,
         transfers:JSON.parse(x.transfers_json||'[]'),
       }))
     });
@@ -267,7 +272,7 @@ async function handleApi(request, env) {
     const recordId=id();
     await env.DB.batch([
       env.DB.prepare('INSERT OR REPLACE INTO settlement_resets(person_id,reset_at) VALUES(?,?)').bind(pid,resetAt),
-      env.DB.prepare('INSERT INTO settlement_reset_records(id,person_id,reset_at,usd_adjustment,cny_adjustment,transfers_json) VALUES(?,?,?,?,?,?)').bind(recordId,pid,resetAt,usdAdjustment,cnyAdjustment,JSON.stringify(transfers))
+      env.DB.prepare('INSERT INTO settlement_reset_records(id,person_id,reset_at,usd_adjustment,cny_adjustment,transfers_json,has_snapshot) VALUES(?,?,?,?,?,?,1)').bind(recordId,pid,resetAt,usdAdjustment,cnyAdjustment,JSON.stringify(transfers))
     ]);
     return json({ok:true,recordId,personId:pid,name:person.name,resetAt});
   }
