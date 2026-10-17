@@ -39,6 +39,9 @@ async function initDb(env) {
   try {
     await env.DB.prepare('ALTER TABLE settlement_reset_records ADD COLUMN has_snapshot INTEGER NOT NULL DEFAULT 0').run();
   } catch {}
+  // Backfill records created by the previous snapshot implementation before the
+  // explicit marker existed. Non-zero currency adjustments prove these are snapshots.
+  await env.DB.prepare('UPDATE settlement_reset_records SET has_snapshot=1 WHERE has_snapshot=0 AND (ABS(usd_adjustment)>0.0000001 OR ABS(cny_adjustment)>0.0000001)').run();
   await migrateLegacyData(env);
   await correctLegacyEchoTransferUsd(env);
   dbReady = true;
