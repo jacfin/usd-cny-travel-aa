@@ -540,9 +540,17 @@ function TravelAA() {
     // Any successful settlement marks the shared cutoff for the already-settled period.
     const sortedResetTimes = [...latestByPerson.values()].sort();
     const latestFullySettledAt = sortedResetTimes[sortedResetTimes.length - 1] || '';
-    // Bills store a calendar date (not a timestamp). Exclude bills dated on or
-    // before the settlement date; include all bills from the following day onward.
-    return latestFullySettledAt ? latestFullySettledAt.slice(0, 10) : '';
+    // resetAt is stored as an ISO UTC timestamp, while bill.date is a local
+    // calendar date. Do NOT slice the UTC string: e.g. 2026-10-18T03:41Z is
+    // still Oct 17 in US Eastern time. Convert to the browser's local calendar
+    // date so bills entered the day after settlement are included correctly.
+    if (!latestFullySettledAt) return '';
+    const settledAt = new Date(latestFullySettledAt);
+    if (Number.isNaN(settledAt.getTime())) return latestFullySettledAt.slice(0, 10);
+    const y = settledAt.getFullYear();
+    const m = String(settledAt.getMonth() + 1).padStart(2, '0');
+    const d = String(settledAt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }, [people, settlementResets]);
 
   const balances = useMemo(() => {
