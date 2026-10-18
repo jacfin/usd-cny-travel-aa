@@ -540,12 +540,9 @@ function TravelAA() {
     // Any successful settlement marks the shared cutoff for the already-settled period.
     const sortedResetTimes = [...latestByPerson.values()].sort();
     const latestFullySettledAt = sortedResetTimes[sortedResetTimes.length - 1] || '';
-    if (!latestFullySettledAt) return '';
-    const settledThrough = new Date(latestFullySettledAt);
-    if (Number.isNaN(settledThrough.getTime())) return '';
-    // Treat the entire settlement calendar day as settled; new bills begin next day.
-    settledThrough.setUTCDate(settledThrough.getUTCDate() + 1);
-    return settledThrough.toISOString().slice(0, 10);
+    // Bills store a calendar date (not a timestamp). Exclude bills dated on or
+    // before the settlement date; include all bills from the following day onward.
+    return latestFullySettledAt ? latestFullySettledAt.slice(0, 10) : '';
   }, [people, settlementResets]);
 
   const balances = useMemo(() => {
