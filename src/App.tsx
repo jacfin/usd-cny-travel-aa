@@ -1033,7 +1033,7 @@ function TravelAA() {
                         <div>
                           <b>{personNameOf(reset.personId)}</b>
                           <small style={{display:'block', marginTop:'4px'}}>
-                            {new Date(reset.resetAt).toLocaleString('zh-CN', {hour12:false})}
+                            {new Date(reset.resetAt).toLocaleString('zh-CN', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false})}
                           </small>
                           {reset.transfers?.length ? reset.transfers.map((t, j) => (
                             <div key={j} style={{marginTop:'6px'}}>
