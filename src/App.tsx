@@ -211,6 +211,7 @@ type Person = { id: string; name: string };
 type Bill = {
   id: string;
   date: string;
+  createdAt?: string;
   title: string;
   amount: number;
   payerId: string;
@@ -526,32 +527,29 @@ function TravelAA() {
     }
   };
 
-  // AA settlement is calculated only from bills entered after the latest completed
-  // settlement date. Historical bills remain visible and continue contributing to
-  // lifetime paid/actual-expense statistics, but must not reopen old debts.
-  const settlementCutoffDate = useMemo(() => {
+  // Use the exact settlement timestamp, not only a calendar date. Bills added
+  // after settlement must count immediately, even on the same day; earlier bills
+  // stay settled. Legacy bills without timestamps fall back to the local bill date.
+  const settlementCutoffAt = useMemo(() => {
     if (!people.length) return '';
     const latestByPerson = new Map<string, string>();
     settlementResets.forEach(reset => {
       const current = latestByPerson.get(reset.personId) || '';
       if (reset.resetAt > current) latestByPerson.set(reset.personId, reset.resetAt);
     });
-    // A participant who is owed money may not have a settlement button/record.
-    // Any successful settlement marks the shared cutoff for the already-settled period.
     const sortedResetTimes = [...latestByPerson.values()].sort();
-    const latestFullySettledAt = sortedResetTimes[sortedResetTimes.length - 1] || '';
-    // resetAt is stored as an ISO UTC timestamp, while bill.date is a local
-    // calendar date. Do NOT slice the UTC string: e.g. 2026-10-18T03:41Z is
-    // still Oct 17 in US Eastern time. Convert to the browser's local calendar
-    // date so bills entered the day after settlement are included correctly.
-    if (!latestFullySettledAt) return '';
-    const settledAt = new Date(latestFullySettledAt);
-    if (Number.isNaN(settledAt.getTime())) return latestFullySettledAt.slice(0, 10);
+    return sortedResetTimes[sortedResetTimes.length - 1] || '';
+  }, [people, settlementResets]);
+
+  const settlementCutoffDate = useMemo(() => {
+    if (!settlementCutoffAt) return '';
+    const settledAt = new Date(settlementCutoffAt);
+    if (Number.isNaN(settledAt.getTime())) return settlementCutoffAt.slice(0, 10);
     const y = settledAt.getFullYear();
     const m = String(settledAt.getMonth() + 1).padStart(2, '0');
     const d = String(settledAt.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
-  }, [people, settlementResets]);
+  }, [settlementCutoffAt]);
 
   const balances = useMemo(() => {
     const validIds = new Set(people.map(p => p.id));
@@ -561,8 +559,11 @@ function TravelAA() {
       usd[p.id] = 0;
       cny[p.id] = 0;
     });
-    const activeBills = settlementCutoffDate
-      ? bills.filter(b => b.date > settlementCutoffDate)
+    const activeBills = settlementCutoffAt
+      ? bills.filter(b => {
+          if (b.createdAt) return b.createdAt > settlementCutoffAt;
+          return b.date > settlementCutoffDate;
+        })
       : bills;
     activeBills.forEach(b => {
       if (!validIds.has(b.payerId)) return;
@@ -578,7 +579,7 @@ function TravelAA() {
       });
     });
     return { usd, cny };
-  }, [people, bills, settlementCutoffDate]);
+  }, [people, bills, settlementCutoffAt, settlementCutoffDate]);
 
   const settlementRateValue = settlementRate || 0;
   // 结算内部统一以 USD 作为计算单位：外币账单已在录入时锁定 USD；
