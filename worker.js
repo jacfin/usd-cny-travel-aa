@@ -28,13 +28,17 @@ async function initDb(env) {
   await env.DB.batch([
     env.DB.prepare('CREATE TABLE IF NOT EXISTS people (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)'),
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS people_name_nocase ON people(name COLLATE NOCASE)'),
-    env.DB.prepare('CREATE TABLE IF NOT EXISTS bills (id TEXT PRIMARY KEY, date TEXT NOT NULL, title TEXT NOT NULL, amount REAL NOT NULL, payer_id TEXT NOT NULL, share_ids TEXT NOT NULL, note TEXT NOT NULL DEFAULT \'\', currency TEXT NOT NULL DEFAULT \'USD\', usd_amount REAL NOT NULL)'),
+    env.DB.prepare('CREATE TABLE IF NOT EXISTS bills (id TEXT PRIMARY KEY, date TEXT NOT NULL, title TEXT NOT NULL, amount REAL NOT NULL, payer_id TEXT NOT NULL, share_ids TEXT NOT NULL, note TEXT NOT NULL DEFAULT \'\', currency TEXT NOT NULL DEFAULT \'USD\', usd_amount REAL NOT NULL, created_at TEXT)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS bills_date_idx ON bills(date)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_resets (person_id TEXT PRIMARY KEY, reset_at TEXT NOT NULL)'),
     env.DB.prepare('CREATE TABLE IF NOT EXISTS settlement_reset_records (id TEXT PRIMARY KEY, person_id TEXT NOT NULL, reset_at TEXT NOT NULL, usd_adjustment REAL NOT NULL DEFAULT 0, cny_adjustment REAL NOT NULL DEFAULT 0, transfers_json TEXT NOT NULL DEFAULT \'[]\', has_snapshot INTEGER NOT NULL DEFAULT 0)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS settlement_reset_records_time_idx ON settlement_reset_records(reset_at)'),
   ]);
+  // Add an exact creation timestamp to bills. Legacy rows are backfilled to their
+  // bill date at midnight; all new bills get the real insertion timestamp.
+  try { await env.DB.prepare('ALTER TABLE bills ADD COLUMN created_at TEXT').run(); } catch {}
+  await env.DB.prepare("UPDATE bills SET created_at = date || 'T00:00:00.000Z' WHERE created_at IS NULL OR created_at = ''").run();
   // Existing rows default to has_snapshot=0 (legacy); new settlements explicitly set it to 1.
   try {
     await env.DB.prepare('ALTER TABLE settlement_reset_records ADD COLUMN has_snapshot INTEGER NOT NULL DEFAULT 0').run();
@@ -207,14 +211,14 @@ async function getMastercard(currency) {
 
 function personRow(row) { return { id:row.id, name:row.name }; }
 function billRow(row) {
-  return { id:row.id, date:row.date, title:row.title, amount:Number(row.amount), payerId:row.payer_id, shareIds:JSON.parse(row.share_ids||'[]'), note:row.note||'', currency:row.currency||'USD', usdAmount:Number(row.usd_amount) };
+  return { id:row.id, date:row.date, createdAt:row.created_at || '', title:row.title, amount:Number(row.amount), payerId:row.payer_id, shareIds:JSON.parse(row.share_ids||'[]'), note:row.note||'', currency:row.currency||'USD', usdAmount:Number(row.usd_amount) };
 }
 async function listPeople(env) {
   const r=await env.DB.prepare('SELECT id,name FROM people ORDER BY rowid').all();
   return r.results.map(personRow);
 }
 async function listBills(env) {
-  const r=await env.DB.prepare('SELECT id,date,title,amount,payer_id,share_ids,note,currency,usd_amount FROM bills ORDER BY date DESC, rowid DESC').all();
+  const r=await env.DB.prepare('SELECT id,date,title,amount,payer_id,share_ids,note,currency,usd_amount,created_at FROM bills ORDER BY date DESC, rowid DESC').all();
   return r.results.map(billRow);
 }
 
@@ -305,8 +309,8 @@ async function handleApi(request, env) {
     if (!b?.date || !b?.title || !(Number(b.amount)>0) || !b?.payerId || !Array.isArray(b.shareIds) || !b.shareIds.length) return fail('invalid bill',400);
     const usd=String(b.currency||'USD').toUpperCase()==='CNY' ? 0 : Number(b.usdAmount ?? b.amount);
     if (String(b.currency||'USD').toUpperCase()!=='CNY' && !(usd>0)) return fail('invalid usdAmount',400);
-    const bill={id:id(),date:String(b.date),title:String(b.title).trim(),amount:Number(b.amount),payerId:String(b.payerId),shareIds:b.shareIds.map(String),note:String(b.note||''),currency:String(b.currency||'USD'),usdAmount:usd};
-    await env.DB.prepare('INSERT INTO bills(id,date,title,amount,payer_id,share_ids,note,currency,usd_amount) VALUES(?,?,?,?,?,?,?,?,?)').bind(bill.id,bill.date,bill.title,bill.amount,bill.payerId,JSON.stringify(bill.shareIds),bill.note,bill.currency,bill.usdAmount).run();
+    const bill={id:id(),date:String(b.date),createdAt:new Date().toISOString(),title:String(b.title).trim(),amount:Number(b.amount),payerId:String(b.payerId),shareIds:b.shareIds.map(String),note:String(b.note||''),currency:String(b.currency||'USD'),usdAmount:usd};
+    await env.DB.prepare('INSERT INTO bills(id,date,title,amount,payer_id,share_ids,note,currency,usd_amount,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(bill.id,bill.date,bill.title,bill.amount,bill.payerId,JSON.stringify(bill.shareIds),bill.note,bill.currency,bill.usdAmount,bill.createdAt).run();
     return json({id:bill.id},201);
   }
   const billMatch=path.match(/^\/api\/bills\/([^/]+)$/);
