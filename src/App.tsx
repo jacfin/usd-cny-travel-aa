@@ -240,7 +240,7 @@ function TravelAA() {
       return 'USD';
     }
   });
-  const [fxRate, setFxRate] = useState<number | null>(1);
+  const [fxRate, setFxRate] = useState<number | null>(() => currency === 'USD' ? 1 : null);
   const [usdAmount, setUsdAmount] = useState<number | null>(null);
   const [fxLoading, setFxLoading] = useState(false);
   const [fxFetchedAt, setFxFetchedAt] = useState<string | null>(null);
@@ -439,7 +439,7 @@ function TravelAA() {
     const numericAmount = Number(amount);
     if (!title.trim()) { setModalMessage('请填写账单名称。'); setRateModal(true); return; }
     if (!(numericAmount > 0)) { setModalMessage('请输入有效金额。'); setRateModal(true); return; }
-    if (currency !== 'USD' && currency !== 'CNY' && !(fxRate && usdAmount)) {
+    if (currency !== 'USD' && currency !== 'CNY' && (fxLoading || !fxFetchedAt || !(fxRate && fxRate > 0) || !(usdAmount && usdAmount > 0))) {
       setModalMessage('请先获取汇率，再添加账单。');
       setRateModal(true);
       return;
@@ -794,7 +794,7 @@ function TravelAA() {
                     ? (v > 0 ? v : null)
                     : currency === 'CNY'
                       ? null
-                      : (fxRate && v > 0 ? v * fxRate : null)
+                      : (fxRate && fxRate > 0 && fxFetchedAt && v > 0 ? v * fxRate : null)
                 );
               }} placeholder="0.00" />
             </label>
