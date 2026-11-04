@@ -221,7 +221,8 @@ type Bill = {
   usdAmount?: number;
 };
 
-const today = new Date().toISOString().slice(0, 10);
+const getLocalToday = () => { const now = new Date(); const pad = (value: number) => String(value).padStart(2, '0'); return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`; };
+const today = getLocalToday();
 
 function TravelAA() {
   const [people, setPeople] = useState<Person[]>([]);
@@ -450,6 +451,8 @@ function TravelAA() {
     setError('');
     const payload = {
       date,
+      createdAt: new Date().toISOString(),
+      createdTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
       title: title.trim(),
       amount: numericAmount,
       currency,
