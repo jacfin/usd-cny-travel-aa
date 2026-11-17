@@ -188,7 +188,7 @@ async function broadRate(currency) {
 async function getMastercard(currency) {
   // ARS uses the user's fixed custom rate, not Mastercard or a live market quote.
   if (currency === 'ARS') {
-    return { rate:0.000675, updatedAt:new Date().toISOString(), source:'阿根廷自定义汇率（固定）', cached:false };
+    return { rate:0.0006757, updatedAt:new Date().toISOString(), source:'阿根廷自定义汇率（固定）', cached:false };
   }
   const cached=mastercardCache.get(currency);
   if (cached && Date.now()-cached.cachedAt<600000) return { ...cached, cached:true };
