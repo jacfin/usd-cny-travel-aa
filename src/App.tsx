@@ -64,7 +64,7 @@ function ConverterPage() {
       if (!Number.isFinite(data.rate) || data.rate <= 0) throw new Error('invalid mastercard rate');
       setMastercardRate(data.rate);
       setMastercardUpdatedAt(data.updatedAt);
-      const sourceLabel = data.source.includes('非 Mastercard') ? '参考汇率' : 'Mastercard';
+      const sourceLabel = data.source.includes('自定义汇率') ? '自定义汇率' : data.source.includes('非 Mastercard') ? '参考汇率' : 'Mastercard';
       setStatus(data.cached ? `${sourceLabel} ${nextCurrency}→USD 已快速加载` : `${sourceLabel} ${nextCurrency}→USD 已更新`);
     } catch {
       setMastercardRate(null);
@@ -245,6 +245,7 @@ function TravelAA() {
   const [usdAmount, setUsdAmount] = useState<number | null>(null);
   const [fxLoading, setFxLoading] = useState(false);
   const [fxFetchedAt, setFxFetchedAt] = useState<string | null>(null);
+  const [fxSource, setFxSource] = useState('Mastercard');
   const [rateModal, setRateModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [resetModal, setResetModal] = useState(false);
@@ -292,9 +293,10 @@ function TravelAA() {
     setFxLoading(true);
     try {
       const response = await api.get('/api/rates/mastercard?currency=' + encodeURIComponent(nextCurrency));
-      const data = response.data as { rate: number };
+      const data = response.data as { rate: number; source?: string };
       if (!(data.rate > 0)) throw new Error('invalid rate');
       setFxRate(data.rate);
+      setFxSource(data.source || 'Mastercard');
       setFxFetchedAt(new Date().toLocaleString('zh-CN', { hour12: false }));
       const v = Number(amount);
       setUsdAmount(v > 0 ? v * data.rate : null);
@@ -817,7 +819,7 @@ function TravelAA() {
                   {fxLoading ? '获取中…' : '获取汇率'}
                 </button>
                 <span className={'fxTime ' + (fxRate ? 'success' : 'failure')}>
-                  {fxLoading ? '正在获取汇率…' : fxRate ? 'Mastercard 汇率已获取 · ' + (fxFetchedAt || '') : '汇率获取失败，请重试'}
+                  {fxLoading ? '正在获取汇率…' : fxRate ? (fxSource.includes('自定义汇率') ? '阿根廷自定义汇率已应用 · ' : 'Mastercard 汇率已获取 · ') + (fxFetchedAt || '') : '汇率获取失败，请重试'}
                 </span>
               </>
             ) : (
