@@ -1,4 +1,4 @@
-const SUPPORTED = ['EUR','GBP','JPY','CAD','AUD','MXN','CHF','THB','VND','SGD','KRW','HKD','TWD','MYR','INR','NZD','ARS','BRL','PEN','BOB','CLP'];
+const SUPPORTED = ['EUR','GBP','JPY','CAD','AUD','MXN','CHF','THB','VND','SGD','KRW','HKD','TWD','MYR','INR','NZD','ARS','BRL','PEN','BOB','CLP','UYU'];
 const BANK_URLS = [
   'https://www.bankcomm.com/BankCommSite/default.shtml',
   'https://m.bankcomm.com/',
